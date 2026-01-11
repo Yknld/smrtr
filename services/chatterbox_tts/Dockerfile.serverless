@@ -1,13 +1,9 @@
 # Chatterbox TTS - RunPod Serverless Dockerfile
+# Multi-stage build to reduce final image size
 # For RunPod serverless deployment with scale-to-zero support
-#
-# Key optimizations:
-# 1. Model weights baked into image (fast cold start)
-# 2. No HTTP server (RunPod manages that)
-# 3. Singleton model loading at module level
-# 4. Persistent cache on /runpod-volume
 
-FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+# Stage 1: Builder - Install dependencies
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04 AS builder
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -68,11 +64,56 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copy handler code
 COPY services/chatterbox_tts/runpod /app/runpod
 
+# ============================================================================
+# Stage 2: Runtime - Copy only what's needed
+# ============================================================================
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    DEVICE=cuda \
+    CACHE_DIR=/runpod-volume/tts_cache \
+    MODEL_CACHE_DIR=/runpod-volume/models \
+    MAX_CHARS_PER_CHUNK=500
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3-pip \
+    ffmpeg \
+    libsndfile1 \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.11/dist-packages /usr/local/lib/python3.11/dist-packages
+COPY --from=builder /opt/chatterbox /opt/chatterbox
+
+# Create working directory
+WORKDIR /app
+
+# Copy requirements and install (lightweight deps only)
+COPY services/chatterbox_tts/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt && \
+    rm -rf /root/.cache/pip
+
+# Copy handler code
+COPY services/chatterbox_tts/runpod /app/runpod
+
 # Create cache directories
 RUN mkdir -p /runpod-volume/tts_cache /runpod-volume/models
 
-# Note: Model weights will download on first run (~10-15s cold start)
-# This is acceptable for serverless and avoids build issues
+# Final cleanup
+RUN apt-get autoremove -y && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    find /usr/local/lib/python3.11 -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python3.11 -name "*.pyc" -delete
 
 # RunPod serverless entrypoint (NO uvicorn, NO FastAPI)
 # RunPod manages the HTTP layer

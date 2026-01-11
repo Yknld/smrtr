@@ -648,3 +648,4 @@ This service is a wrapper around [Chatterbox](https://github.com/resemble-ai/cha
 5. ⏳ Add to CI/CD pipeline
 
 Happy deploying! 🚀
+

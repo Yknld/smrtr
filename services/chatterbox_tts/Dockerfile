@@ -41,9 +41,13 @@ RUN pip install --no-cache-dir \
     torchaudio==2.5.0 \
     --index-url https://download.pytorch.org/whl/cu121
 
-# Clone and install Chatterbox directly from GitHub
+# Clone Chatterbox from GitHub
 RUN git clone --depth 1 https://github.com/resemble-ai/chatterbox.git /opt/chatterbox && \
-    pip install --no-cache-dir -e /opt/chatterbox
+    ls -la /opt/chatterbox
+
+# Install Chatterbox dependencies
+RUN cd /opt/chatterbox && \
+    pip install --no-cache-dir -e . --verbose
 
 # Copy requirements and install
 COPY services/chatterbox_tts/requirements.txt /app/requirements.txt

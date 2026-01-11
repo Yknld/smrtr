@@ -1,0 +1,42 @@
+.floating-action-button {
+  position: fixed !important;
+  right: var(--spacing-xl);
+  bottom: var(--spacing-xl);
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-primary-accent);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 1.5rem;
+  box-shadow: var(--shadow-subtle);
+  transition: transform var(--motion-duration-fast) var(--motion-easing-ease-out),
+              box-shadow var(--motion-duration-fast) var(--motion-easing-ease-out),
+              background-color var(--motion-duration-fast) var(--motion-easing-ease-out);
+  z-index: 9999 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+.floating-action-button:hover {
+  transform: translateY(calc(-1 * var(--motion-distance-hover-lift))) scale(1.05);
+  box-shadow: var(--shadow-hover);
+  background-color: var(--color-primary-accent-hover);
+}
+
+.floating-action-button:active {
+  transform: translateY(calc(-1 * var(--motion-distance-hover-lift) * 0.5)) scale(0.95);
+  transition-duration: var(--motion-duration-press);
+}
+
+.floating-action-button__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}

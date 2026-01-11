@@ -1,0 +1,89 @@
+# Chatterbox TTS - RunPod Serverless Dockerfile
+# For RunPod serverless deployment with scale-to-zero support
+#
+# Key optimizations:
+# 1. Model weights baked into image (fast cold start)
+# 2. No HTTP server (RunPod manages that)
+# 3. Singleton model loading at module level
+# 4. Persistent cache on /runpod-volume
+
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    DEVICE=cuda \
+    CACHE_DIR=/runpod-volume/tts_cache \
+    MODEL_CACHE_DIR=/runpod-volume/models \
+    MAX_CHARS_PER_CHUNK=500 \
+    TORCH_HOME=/opt/torch_cache
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    git \
+    ffmpeg \
+    libsndfile1 \
+    libsndfile1-dev \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Upgrade pip
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Create working directory
+WORKDIR /app
+
+# Copy Chatterbox submodule
+COPY external/chatterbox /opt/chatterbox
+
+# Install PyTorch with CUDA support (CUDA 12.1)
+RUN pip install --no-cache-dir \
+    torch==2.5.0 \
+    torchaudio==2.5.0 \
+    --index-url https://download.pytorch.org/whl/cu121
+
+# Install Chatterbox
+RUN pip install --no-cache-dir -e /opt/chatterbox
+
+# Copy requirements and install
+COPY services/chatterbox_tts/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Copy handler code
+COPY services/chatterbox_tts/runpod /app/runpod
+
+# Create cache directories
+RUN mkdir -p /runpod-volume/tts_cache /runpod-volume/models /opt/torch_cache
+
+# ============================================================================
+# BUILD-TIME MODEL DOWNLOAD (reduces cold start from ~15s to ~2-3s)
+# ============================================================================
+# Download model weights at build time and bake into image
+# This eliminates the need to download ~2GB on first request
+RUN python3 -c "\
+import os; \
+os.environ['TORCH_HOME'] = '/opt/torch_cache'; \
+os.environ['MODEL_CACHE_DIR'] = '/opt/torch_cache'; \
+print('Downloading Chatterbox-Turbo model weights...'); \
+from chatterbox.tts_turbo import ChatterboxTurboTTS; \
+model = ChatterboxTurboTTS.from_pretrained(device='cpu'); \
+print('✓ Model weights downloaded and cached in image')"
+
+# Verify model is cached
+RUN ls -lh /opt/torch_cache/ && \
+    du -sh /opt/torch_cache/
+
+# Set MODEL_CACHE_DIR to use baked-in weights
+ENV MODEL_CACHE_DIR=/opt/torch_cache
+
+# RunPod serverless entrypoint (NO uvicorn, NO FastAPI)
+# RunPod manages the HTTP layer
+CMD ["python3", "-u", "runpod/handler.py"]

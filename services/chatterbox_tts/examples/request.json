@@ -1,0 +1,63 @@
+{
+  "examples": [
+    {
+      "name": "Basic TTS",
+      "request": {
+        "text": "Hello, this is a test of Chatterbox TTS.",
+        "format": "mp3"
+      }
+    },
+    {
+      "name": "With paralinguistic tags",
+      "request": {
+        "text": "Hi there [chuckle], I was wondering if you have a minute to chat about this?",
+        "format": "mp3"
+      }
+    },
+    {
+      "name": "Long text (will be chunked)",
+      "request": {
+        "text": "Artificial intelligence is transforming the world in unprecedented ways. From natural language processing to computer vision, AI systems are becoming increasingly sophisticated. Machine learning models can now understand context, generate creative content, and even engage in meaningful conversations. The field continues to evolve rapidly, with new breakthroughs happening every day.",
+        "format": "mp3"
+      }
+    },
+    {
+      "name": "WAV format output",
+      "request": {
+        "text": "This will be saved as a WAV file instead of MP3.",
+        "format": "wav"
+      }
+    },
+    {
+      "name": "Slower speech",
+      "request": {
+        "text": "This text will be spoken more slowly for emphasis.",
+        "speed": 0.8,
+        "format": "mp3"
+      }
+    },
+    {
+      "name": "Faster speech",
+      "request": {
+        "text": "This text will be spoken faster for a more energetic feel.",
+        "speed": 1.3,
+        "format": "mp3"
+      }
+    },
+    {
+      "name": "With seed (reproducible)",
+      "request": {
+        "text": "This will always generate the same audio output.",
+        "seed": 42,
+        "format": "mp3"
+      }
+    },
+    {
+      "name": "Podcast-style narration",
+      "request": {
+        "text": "Welcome back to the show [pause], where we explore the fascinating world of technology. Today, we're diving deep into neural text-to-speech systems [chuckle] and trust me, this is going to be interesting.",
+        "format": "mp3"
+      }
+    }
+  ]
+}

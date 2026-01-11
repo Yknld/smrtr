@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # GPU service (requires NVIDIA Docker runtime)
+  chatterbox-tts-gpu:
+    build:
+      context: ../..
+      dockerfile: services/chatterbox_tts/Dockerfile
+    image: chatterbox-tts:gpu
+    container_name: chatterbox-tts-gpu
+    ports:
+      - "8000:8000"
+    environment:
+      - DEVICE=cuda
+      - CACHE_DIR=/tmp/tts_cache
+      - MODEL_CACHE_DIR=/models
+      - MAX_CHARS_PER_CHUNK=500
+      - DEFAULT_FORMAT=mp3
+    volumes:
+      - tts_cache:/tmp/tts_cache
+      - model_cache:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # CPU service (for testing without GPU)
+  chatterbox-tts-cpu:
+    build:
+      context: ../..
+      dockerfile: services/chatterbox_tts/Dockerfile.cpu
+    image: chatterbox-tts:cpu
+    container_name: chatterbox-tts-cpu
+    ports:
+      - "8001:8000"
+    environment:
+      - DEVICE=cpu
+      - CACHE_DIR=/tmp/tts_cache
+      - MODEL_CACHE_DIR=/models
+      - MAX_CHARS_PER_CHUNK=500
+      - DEFAULT_FORMAT=mp3
+    volumes:
+      - tts_cache_cpu:/tmp/tts_cache
+      - model_cache_cpu:/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  tts_cache:
+  model_cache:
+  tts_cache_cpu:
+  model_cache_cpu:

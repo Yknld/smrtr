@@ -1,4 +1,4 @@
-name: Build Chatterbox TTS Docker Images
+name: Build Chatterbox TTS Docker Image
 
 on:
   push:
@@ -10,8 +10,10 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
-  build-serverless:
-    name: Build Serverless Image
+  # Note: Building only GPU image due to GitHub Actions disk space limits
+  # This image works for both Pods AND Serverless deployments
+  build-gpu:
+    name: Build GPU Image (Works for Pods & Serverless)
     runs-on: ubuntu-latest
     
     steps:
@@ -35,56 +37,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       
-      - name: Build and push Serverless image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./services/chatterbox_tts/Dockerfile.serverless
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:serverless
-            ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:serverless-${{ github.sha }}
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:buildcache,mode=max
-      
-      - name: Image digest
-        run: echo "Serverless image pushed successfully!"
-
-  build-gpu:
-    name: Build GPU Image (Pods)
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-      
-      - name: Initialize submodules
-        run: |
-          git submodule update --init --recursive
-          ls -la external/chatterbox/
-      
-      - name: Free up disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          docker system prune -af
-          df -h
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      
-      - name: Build and push GPU image
+      - name: Build and push GPU image (works for both Pods & Serverless)
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -93,9 +46,13 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:gpu
-            ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:gpu-${{ github.sha }}
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:buildcache-gpu
-          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:buildcache-gpu,mode=max
+            ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:serverless
+            ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:buildcache,mode=max
       
       - name: Image digest
-        run: echo "GPU image pushed successfully!"
+        run: |
+          echo "✅ Image pushed successfully!"
+          echo "Tags: latest, gpu, serverless"
+          echo "Use for both RunPod Pods AND Serverless deployments"

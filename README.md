@@ -1,4 +1,7 @@
-# Smartr Web App - Shell Layout
+# smrtr
+smrtr study integrated into daily life.
+
+## Smartr Web App
 
 A React web app workspace layout shell with sidebar, main content area, and optional inspector panel.
 

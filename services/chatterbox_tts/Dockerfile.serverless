@@ -69,28 +69,10 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY services/chatterbox_tts/runpod /app/runpod
 
 # Create cache directories
-RUN mkdir -p /runpod-volume/tts_cache /runpod-volume/models /opt/torch_cache
+RUN mkdir -p /runpod-volume/tts_cache /runpod-volume/models
 
-# ============================================================================
-# BUILD-TIME MODEL DOWNLOAD (reduces cold start from ~15s to ~2-3s)
-# ============================================================================
-# Download model weights at build time and bake into image
-# This eliminates the need to download ~2GB on first request
-RUN python3 -c "\
-import os; \
-os.environ['TORCH_HOME'] = '/opt/torch_cache'; \
-os.environ['MODEL_CACHE_DIR'] = '/opt/torch_cache'; \
-print('Downloading Chatterbox-Turbo model weights...'); \
-from chatterbox.tts_turbo import ChatterboxTurboTTS; \
-model = ChatterboxTurboTTS.from_pretrained(device='cpu'); \
-print('✓ Model weights downloaded and cached in image')"
-
-# Verify model is cached
-RUN ls -lh /opt/torch_cache/ && \
-    du -sh /opt/torch_cache/
-
-# Set MODEL_CACHE_DIR to use baked-in weights
-ENV MODEL_CACHE_DIR=/opt/torch_cache
+# Note: Model weights will download on first run (~10-15s cold start)
+# This is acceptable for serverless and avoids build issues
 
 # RunPod serverless entrypoint (NO uvicorn, NO FastAPI)
 # RunPod manages the HTTP layer

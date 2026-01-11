@@ -1,0 +1,223 @@
+.practice-lecture-selection {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: var(--spacing-xl);
+}
+
+.practice-lecture-selection__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.practice-lecture-selection__back-button {
+  background: none;
+  border: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-card);
+  transition: background-color var(--motion-duration-fast) var(--motion-easing-ease-out),
+              transform var(--motion-duration-fast) var(--motion-easing-ease-out);
+  font-family: var(--font-family-sans);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+  margin-top: var(--spacing-xs);
+}
+
+.practice-lecture-selection__back-button:hover {
+  background-color: var(--color-background-base);
+  transform: translateX(-2px);
+}
+
+.practice-lecture-selection__back-button:active {
+  transform: translateX(-1px) scale(0.98);
+  transition-duration: var(--motion-duration-press);
+}
+
+.practice-lecture-selection__header-content {
+  flex: 1;
+}
+
+.practice-lecture-selection__title {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-tight);
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.practice-lecture-selection__instruction {
+  font-size: var(--font-size-body);
+  color: var(--color-text-muted);
+  line-height: var(--line-height-normal);
+  margin: 0;
+}
+
+.practice-lecture-selection__content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.practice-lecture-selection__controls {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.practice-lecture-selection__control-button {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border: 1px solid var(--color-border-hairline);
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface-card);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--motion-duration-fast) var(--motion-easing-ease-out),
+              transform var(--motion-duration-fast) var(--motion-easing-ease-out),
+              box-shadow var(--motion-duration-fast) var(--motion-easing-ease-out),
+              border-color var(--motion-duration-fast) var(--motion-easing-ease-out);
+  font-family: var(--font-family-sans);
+  box-shadow: var(--shadow-subtle);
+}
+
+.practice-lecture-selection__control-button:hover:not(:disabled) {
+  background-color: var(--color-background-base);
+  border-color: var(--color-primary-accent);
+  transform: translateY(calc(-1 * var(--motion-distance-hover-lift)));
+  box-shadow: var(--shadow-hover);
+}
+
+.practice-lecture-selection__control-button:active:not(:disabled) {
+  transform: translateY(calc(-1 * var(--motion-distance-hover-lift) * 0.5)) scale(0.98);
+  transition-duration: var(--motion-duration-press);
+}
+
+.practice-lecture-selection__control-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.practice-lecture-selection__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.practice-lecture-selection__checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background-color: var(--color-surface-card);
+  border: 1px solid var(--color-border-hairline);
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  transition: background-color var(--motion-duration-fast) var(--motion-easing-ease-out),
+              transform var(--motion-duration-fast) var(--motion-easing-ease-out),
+              box-shadow var(--motion-duration-fast) var(--motion-easing-ease-out);
+  box-shadow: var(--shadow-subtle);
+  user-select: none;
+}
+
+.practice-lecture-selection__checkbox-item:hover {
+  background-color: var(--color-background-base);
+  transform: translateY(calc(-1 * var(--motion-distance-hover-lift)));
+  box-shadow: var(--shadow-hover);
+}
+
+.practice-lecture-selection__checkbox-input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.practice-lecture-selection__checkbox-custom {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--color-border-hairline);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-card);
+  flex-shrink: 0;
+  transition: border-color var(--motion-duration-fast) var(--motion-easing-ease-out),
+              background-color var(--motion-duration-fast) var(--motion-easing-ease-out),
+              transform var(--motion-duration-fast) var(--motion-easing-ease-out);
+}
+
+.practice-lecture-selection__checkbox-input:checked + .practice-lecture-selection__checkbox-custom {
+  background-color: var(--color-primary-accent);
+  border-color: var(--color-primary-accent);
+}
+
+.practice-lecture-selection__checkbox-input:checked + .practice-lecture-selection__checkbox-custom::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: translate(-50%, -60%) rotate(45deg);
+}
+
+.practice-lecture-selection__checkbox-label {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-normal);
+  flex: 1;
+}
+
+.practice-lecture-selection__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--color-border-hairline);
+}
+
+.practice-lecture-selection__continue-button {
+  padding: var(--spacing-md) var(--spacing-2xl);
+  border: none;
+  border-radius: var(--radius-card);
+  background-color: var(--color-primary-accent);
+  color: white;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: background-color var(--motion-duration-fast) var(--motion-easing-ease-out),
+              transform var(--motion-duration-fast) var(--motion-easing-ease-out),
+              box-shadow var(--motion-duration-fast) var(--motion-easing-ease-out);
+  font-family: var(--font-family-sans);
+  box-shadow: var(--shadow-subtle);
+}
+
+.practice-lecture-selection__continue-button:hover:not(:disabled) {
+  background-color: var(--color-primary-accent-hover);
+  transform: translateY(calc(-1 * var(--motion-distance-hover-lift)));
+  box-shadow: var(--shadow-hover);
+}
+
+.practice-lecture-selection__continue-button:active:not(:disabled) {
+  transform: translateY(calc(-1 * var(--motion-distance-hover-lift) * 0.5)) scale(0.97);
+  transition-duration: var(--motion-duration-press);
+}
+
+.practice-lecture-selection__continue-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--color-text-muted);
+}

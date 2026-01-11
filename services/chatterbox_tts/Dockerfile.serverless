@@ -41,17 +41,15 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 # Create working directory
 WORKDIR /app
 
-# Copy Chatterbox submodule
-COPY external/chatterbox /opt/chatterbox
-
 # Install PyTorch with CUDA support (CUDA 12.1)
 RUN pip install --no-cache-dir \
     torch==2.5.0 \
     torchaudio==2.5.0 \
     --index-url https://download.pytorch.org/whl/cu121
 
-# Install Chatterbox
-RUN pip install --no-cache-dir -e /opt/chatterbox
+# Clone and install Chatterbox directly from GitHub
+RUN git clone --depth 1 https://github.com/resemble-ai/chatterbox.git /opt/chatterbox && \
+    pip install --no-cache-dir -e /opt/chatterbox
 
 # Copy requirements and install
 COPY services/chatterbox_tts/requirements.txt /app/requirements.txt

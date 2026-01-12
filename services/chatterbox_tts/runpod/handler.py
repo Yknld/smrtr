@@ -454,7 +454,4 @@ logger.info(f"Device: {device_name}")
 logger.info(f"Cache dir: {CACHE_DIR}")
 logger.info(f"Model cache dir: {MODEL_CACHE_DIR}")
 
-runpod.serverless.start({
-    "handler": handler,
-    "return_aggregate_stream": True
-})
+runpod.serverless.start({"handler": handler})

@@ -137,11 +137,32 @@ def handler(event):
                 'cfg_weight': cfg_weight
             }
             
-            # Add voice if provided
-            if voice and os.path.exists(voice):
-                gen_params['audio_prompt_path'] = voice
+            # Handle voice reference (file path or base64)
+            voice_temp_file = None
+            if voice:
+                if os.path.exists(voice):
+                    # Voice is a file path
+                    gen_params['audio_prompt_path'] = voice
+                else:
+                    # Assume voice is base64 encoded audio
+                    try:
+                        voice_data = base64.b64decode(voice)
+                        voice_temp_file = tempfile.NamedTemporaryFile(suffix='.flac', delete=False)
+                        voice_temp_file.write(voice_data)
+                        voice_temp_file.close()
+                        gen_params['audio_prompt_path'] = voice_temp_file.name
+                        print(f"✅ Decoded base64 voice reference ({len(voice_data)} bytes)")
+                    except Exception as e:
+                        print(f"⚠️  Failed to decode voice base64: {e}")
             
             audio_tensor = model.generate(text, **gen_params)
+            
+            # Clean up temp voice file if created
+            if voice_temp_file:
+                try:
+                    os.unlink(voice_temp_file.name)
+                except:
+                    pass
             
             print(f"✅ Audio generated (shape: {audio_tensor.shape})")
             

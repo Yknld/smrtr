@@ -333,6 +333,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                 logger.info(f"  Chunk {i+1}/{chunks_processed}: '{chunk[:40]}...'")
                 
                 # Multilingual: simple like Turbo but with language_id + HF API params
+                logger.info(f"  → Calling model.generate (language={language}, voice={'yes' if voice else 'no'})")
                 if voice:
                     wav = model.generate(
                         chunk,
@@ -350,6 +351,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                         temperature=0.8,
                         cfg_weight=0.5
                     )
+                logger.info(f"  ✓ model.generate returned (shape={wav.shape if hasattr(wav, 'shape') else 'unknown'})")
                 
                 audio_tensors.append(wav)
             

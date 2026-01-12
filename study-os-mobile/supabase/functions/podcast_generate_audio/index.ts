@@ -115,18 +115,18 @@ const RUNPOD_ENDPOINT_ID = "70sq2akye030kh";
 const RUNPOD_BASE_URL = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}`;
 
 // Voice configurations for speakers
-// NOTE: Custom voice files are < 5 seconds, causing "Audio prompt must be longer than 5 seconds!" error
-// Using null to leverage multilingual model's built-in high-quality default voices
+// NOTE: Multilingual model REQUIRES audio_prompt_path (unlike Turbo which has defaults)
+// Using host_voice.flac (8.89s) for both speakers until we get more 5+ second samples
 const VOICE_CONFIG = {
   a: {
     speed: 1.0,                      // Normal speed for host
-    voice: null,                     // Use default multilingual voice (will use built-in conditionals)
-    description: "Host (Speaker A - Default Voice)"
+    voice: "/app/runpod/host_voice.flac",  // Custom 8.89s voice sample
+    description: "Host (Speaker A - Custom Voice)"
   },
   b: {
     speed: 1.05,                     // Slightly faster for co-host
-    voice: null,                     // Use default multilingual voice
-    description: "Co-host (Speaker B - Default Voice)"
+    voice: "/app/runpod/host_voice.flac",  // Same voice, different speed creates variety
+    description: "Co-host (Speaker B - Same Voice, Different Speed)"
   },
 };
 

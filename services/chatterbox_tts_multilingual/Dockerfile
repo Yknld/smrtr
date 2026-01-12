@@ -13,7 +13,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HUGGINGFACE_HUB_CACHE=/models/huggingface/hub \
     TRANSFORMERS_CACHE=/models/huggingface/transformers \
     MAX_CHARS_PER_CHUNK=500 \
-    DEFAULT_FORMAT=mp3
+    DEFAULT_FORMAT=mp3 \
+    HF_HUB_OFFLINE=0
 
 # Install system dependencies and Python 3.11 from deadsnakes PPA
 RUN apt-get update && \

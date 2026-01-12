@@ -233,12 +233,24 @@ def initialize_model():
     print("   Languages: 23")
     print("   Device: CUDA")
     
+    # Get HF token from environment if available
+    hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
+    if hf_token:
+        print("   Using HuggingFace token from environment")
+    else:
+        print("   ⚠️  No HF_TOKEN found - model download may fail if gated")
+    
     try:
-        model = ChatterboxMultilingualTTS.from_pretrained(device="cuda")
+        # Pass token if available
+        if hf_token:
+            model = ChatterboxMultilingualTTS.from_pretrained(device="cuda", token=hf_token)
+        else:
+            model = ChatterboxMultilingualTTS.from_pretrained(device="cuda")
         print("✅ Model initialized successfully")
         return model
     except Exception as e:
         print(f"❌ Failed to initialize model: {e}")
+        print("   Hint: If model is gated, set HF_TOKEN environment variable")
         raise
 
 

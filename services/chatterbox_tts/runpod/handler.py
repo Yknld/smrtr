@@ -55,22 +55,22 @@ def _load_model_singleton():
     
     try:
         start_time = time.time()
-        logger.info("Loading Chatterbox Multilingual model (23 languages, singleton)...")
+        logger.info("Loading Chatterbox-Turbo model (English-only, fast)...")
         
         # Set cache directory for model weights BEFORE any imports
         os.environ['TORCH_HOME'] = str(MODEL_CACHE_DIR)
         
-        # Determine device - match example_tts.py exactly
+        # Determine device
         if torch.cuda.is_available():
             device_name = "cuda"
         else:
             device_name = "cpu"
         logger.info(f"Device: {device_name}")
         
-        from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+        from chatterbox.tts_turbo import ChatterboxTurboTTS
         
-        # Load multilingual model exactly as in example_tts.py
-        model = ChatterboxMultilingualTTS.from_pretrained(device=device_name)
+        # Load Turbo model
+        model = ChatterboxTurboTTS.from_pretrained(device=device_name)
         model_loaded = True
         
         load_time = time.time() - start_time
@@ -332,25 +332,12 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             for i, chunk in enumerate(chunks):
                 logger.info(f"  Chunk {i+1}/{chunks_processed}: '{chunk[:40]}...'")
                 
-                # Multilingual: simple like Turbo but with language_id + HF API params
-                logger.info(f"  → Calling model.generate (language={language}, voice={'yes' if voice else 'no'})")
+                # Turbo: simple generate call
+                logger.info(f"  → Calling model.generate (voice={'yes' if voice else 'no'})")
                 if voice:
-                    wav = model.generate(
-                        chunk,
-                        language_id=language,
-                        audio_prompt_path=voice,
-                        exaggeration=exaggeration,
-                        temperature=0.8,
-                        cfg_weight=0.5
-                    )
+                    wav = model.generate(chunk, audio_prompt_path=voice)
                 else:
-                    wav = model.generate(
-                        chunk,
-                        language_id=language,
-                        exaggeration=exaggeration,
-                        temperature=0.8,
-                        cfg_weight=0.5
-                    )
+                    wav = model.generate(chunk)
                 logger.info(f"  ✓ model.generate returned (shape={wav.shape if hasattr(wav, 'shape') else 'unknown'})")
                 
                 audio_tensors.append(wav)

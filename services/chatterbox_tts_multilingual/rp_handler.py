@@ -18,6 +18,13 @@ model = None
 CACHE_DIR = Path("/tmp/tts_cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Supported languages (23 languages from Chatterbox Multilingual)
+SUPPORTED_LANGUAGES = {
+    'ar', 'da', 'de', 'el', 'en', 'es', 'fi', 'fr', 'he', 'hi', 
+    'it', 'ja', 'ko', 'ms', 'nl', 'no', 'pl', 'pt', 'ru', 'sv', 
+    'sw', 'tr', 'zh'
+}
+
 
 def handler(event):
     """
@@ -26,16 +33,20 @@ def handler(event):
     Expected input format (matches HuggingFace API):
     {
         "text": "Text to synthesize",  # or "text_input"
-        "language": "en",  # or "language_id" - Language code
+        "language": "en",  # or "language_id" - Language code (23 languages supported)
         "voice": "/app/runpod/host_voice.flac",  # or "audio_prompt_path_input" - Optional
         "format": "mp3",  # mp3 or wav
         "exaggeration": 0.5,  # or "exaggeration_input" - 0.0-1.0, controls expressiveness
         "temperature": 0.8,  # or "temperature_input" - sampling temperature
         "cfg_weight": 0.5,  # or "cfgw_input" - classifier-free guidance weight
-        "seed": 0,  # or "seed_num_input" - random seed for reproducibility
-        "speed": 1.0  # Speed multiplier (not in official API)
+        "seed": 0  # or "seed_num_input" - random seed for reproducibility
     }
     """
+    global model
+    
+    # Lazy initialization - ensure model is loaded
+    if model is None:
+        initialize_model()
     input_data = event.get('input', {})
     
     # Support both simplified and official HuggingFace API parameter names
@@ -46,6 +57,13 @@ def handler(event):
     language = (input_data.get('language') or 
                 input_data.get('language_id') or 
                 'en')
+    
+    # Validate language
+    if language not in SUPPORTED_LANGUAGES:
+        return {
+            "error": f"Unsupported language: {language}",
+            "supported_languages": sorted(list(SUPPORTED_LANGUAGES))
+        }
     
     voice = (input_data.get('voice') or 
              input_data.get('audio_prompt_path_input') or 
@@ -70,8 +88,6 @@ def handler(event):
     if seed is not None:
         seed = int(seed)
     
-    speed = float(input_data.get('speed', 1.0))
-    
     if not text:
         return {"error": "No text provided"}
     
@@ -91,7 +107,7 @@ def handler(event):
         
         # Generate cache key
         cache_key = hashlib.sha256(
-            f"{text}|{language}|{voice}|{format_type}|{exaggeration}|{temperature}|{cfg_weight}|{seed}|{speed}".encode()
+            f"{text}|{language}|{voice}|{format_type}|{exaggeration}|{temperature}|{cfg_weight}|{seed}".encode()
         ).hexdigest()
         cache_file = CACHE_DIR / f"{cache_key}.{format_type}"
         
@@ -129,14 +145,16 @@ def handler(event):
             
             print(f"✅ Audio generated (shape: {audio_tensor.shape})")
             
-            # Apply speed adjustment if needed
-            if speed != 1.0:
-                new_sample_rate = int(model.sr * speed)
-                audio_tensor = torchaudio.functional.resample(
-                    audio_tensor,
-                    orig_freq=model.sr,
-                    new_freq=new_sample_rate
-                )
+            # Normalize tensor shape to [channels, time]
+            if audio_tensor.dim() == 1:
+                # Shape is [time] -> add channel dimension
+                audio_tensor = audio_tensor.unsqueeze(0)
+            elif audio_tensor.dim() == 2 and audio_tensor.shape[0] != 1:
+                # If shape is [time, channels] and channels != 1, transpose
+                if audio_tensor.shape[1] == 1:
+                    audio_tensor = audio_tensor.transpose(0, 1)
+            
+            print(f"✅ Normalized shape: {audio_tensor.shape}")
             
             # Save to temporary file with correct format
             with tempfile.NamedTemporaryFile(suffix=f'.{format_type}', delete=False) as tmp_file:
@@ -178,16 +196,21 @@ def handler(event):
         
         print(f"✅ Complete in {total_time}ms (generation: {generation_time}ms)")
         
+        # Calculate actual audio duration (samples / sample_rate)
+        audio_duration_s = audio_tensor.shape[-1] / model.sr if audio_tensor.dim() >= 1 else 0
+        
         return {
             "status": "success",
             "audio_base64": audio_base64,
             "metadata": {
                 "language": language,
                 "format": format_type,
-                "duration_ms": total_time,
+                "request_ms": total_time,
                 "generation_ms": generation_time,
+                "audio_duration_s": round(audio_duration_s, 2),
                 "cache_hit": generation_time == 0,
-                "model": "chatterbox-multilingual"
+                "model": "chatterbox-multilingual",
+                "sample_rate": model.sr
             }
         }
         

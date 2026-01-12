@@ -334,11 +334,20 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                 
                 # Turbo: simple generate call
                 logger.info(f"  → Calling model.generate (voice={'yes' if voice else 'no'})")
-                if voice:
-                    wav = model.generate(chunk, audio_prompt_path=voice)
-                else:
-                    wav = model.generate(chunk)
-                logger.info(f"  ✓ model.generate returned (shape={wav.shape if hasattr(wav, 'shape') else 'unknown'})")
+                logger.info(f"  → Model type: {type(model).__name__}")
+                logger.info(f"  → Text: '{chunk}'")
+                
+                try:
+                    if voice:
+                        logger.info(f"  → Generating with voice: {voice}")
+                        wav = model.generate(chunk, audio_prompt_path=voice)
+                    else:
+                        logger.info(f"  → Generating without voice")
+                        wav = model.generate(chunk)
+                    logger.info(f"  ✓ model.generate returned (shape={wav.shape if hasattr(wav, 'shape') else 'unknown'})")
+                except Exception as gen_error:
+                    logger.error(f"  ✗ model.generate failed: {gen_error}", exc_info=True)
+                    raise
                 
                 audio_tensors.append(wav)
             

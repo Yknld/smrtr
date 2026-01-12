@@ -59,19 +59,15 @@ RUN git clone --depth 1 https://github.com/resemble-ai/chatterbox.git /opt/chatt
 COPY services/chatterbox_tts_multilingual/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy application code
-COPY services/chatterbox_tts_multilingual/app /app/app
+# Copy serverless handler and voice files
+COPY services/chatterbox_tts_multilingual/rp_handler.py /rp_handler.py
 COPY services/chatterbox_tts_multilingual/runpod /app/runpod
 
 # Create cache directories
 RUN mkdir -p /tmp/tts_cache /models
 
-# Expose port
-EXPOSE 8000
+# Pre-download model weights at build time for faster cold starts
+RUN python3 -c "from chatterbox.mtl_tts import ChatterboxMultilingualTTS; model = ChatterboxMultilingualTTS.from_pretrained(device='cpu'); print('Model cached')"
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Run FastAPI server
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Run serverless handler
+CMD ["python3", "-u", "/rp_handler.py"]

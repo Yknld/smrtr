@@ -1,0 +1,17 @@
+{
+  "name": "storage-verification-tests",
+  "version": "1.0.0",
+  "description": "Verification tests for Supabase Storage policies",
+  "type": "module",
+  "main": "test-storage.js",
+  "scripts": {
+    "test": "node test-storage.js",
+    "test:storage": "node test-storage.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "ws": "^8.16.0"
+  },
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Study OS",
+    "slug": "study-os-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.studyos.mobile",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "We use the microphone to transcribe your speech in real time for study notes.",
+        "NSSpeechRecognitionUsageDescription": "We use speech recognition to provide accurate transcription for your study materials."
+      }
+    },
+    "android": {
+      "package": "com.studyos.mobile",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Study OS to access your microphone for live transcription."
+        }
+      ],
+      "expo-font"
+    ]
+  }
+}

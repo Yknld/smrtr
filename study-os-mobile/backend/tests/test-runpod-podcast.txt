@@ -1,0 +1,29 @@
+Once you set RUNPOD_API_KEY, clean up old episodes and test:
+
+node -e "
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = 'https://euxfugfzmpsemkjpcpuz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1eGZ1Z2Z6bXBzZW1ranBjcHV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgwMDkyMDYsImV4cCI6MjA4MzU4NTIwNn0.bsfC3T5WoUhGrS-6VuowULRHciY7BpzMCBQ3F4fZFRI';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const { data, error } = await supabase.auth.signInWithPassword({
+  email: 'user1@test.com',
+  password: 'password123',
+});
+
+if (error) throw error;
+
+const lessonId = '34b9a0c7-62d7-4002-a642-00488b2c7f7c';
+
+const { data: deleted } = await supabase
+  .from('podcast_episodes')
+  .delete()
+  .eq('lesson_id', lessonId)
+  .select();
+
+console.log('✅ Cleaned up', deleted?.length || 0, 'old episode(s)');
+console.log('🎙️ Now using RunPod Chatterbox TTS!');
+console.log('🚀 Refresh your app to generate a new podcast');
+"

@@ -21,6 +21,7 @@ import {
   generatePodcastScript,
   generatePodcastAudio,
   getCachedPodcast,
+  clearPodcastCache,
   PodcastEpisode,
   PodcastSegment,
   PodcastStatus,
@@ -261,7 +262,11 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
         setIsLoading(true);
         setLoadError(null);
 
-        // Check cache first for instant loading
+        // Clear cache first to ensure fresh data
+        clearPodcastCache(lessonId);
+        console.log('🔄 Cache cleared, fetching fresh podcast data...');
+
+        // Check cache first for instant loading (will be empty after clear above)
         const cachedData = getCachedPodcast(lessonId);
         if (cachedData && cachedData.episode) {
           console.log('⚡ Using cached podcast data');

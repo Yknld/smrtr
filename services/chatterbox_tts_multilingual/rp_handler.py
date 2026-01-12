@@ -5,6 +5,7 @@ Supports 23 languages with voice cloning
 
 import runpod
 import time
+import torch
 import torchaudio
 import os
 import tempfile
@@ -22,23 +23,53 @@ def handler(event):
     """
     Handle TTS generation requests
     
-    Expected input format:
+    Expected input format (matches HuggingFace API):
     {
-        "text": "Text to synthesize",
-        "language": "en",  # Language code (en, es, fr, de, ru, etc.)
-        "voice": "/app/runpod/host_voice.flac",  # Optional: path to voice file
+        "text": "Text to synthesize",  # or "text_input"
+        "language": "en",  # or "language_id" - Language code
+        "voice": "/app/runpod/host_voice.flac",  # or "audio_prompt_path_input" - Optional
         "format": "mp3",  # mp3 or wav
-        "exaggeration": 0.7,  # 0.0-1.0, controls expressiveness
-        "speed": 1.0  # Speed multiplier
+        "exaggeration": 0.5,  # or "exaggeration_input" - 0.0-1.0, controls expressiveness
+        "temperature": 0.8,  # or "temperature_input" - sampling temperature
+        "cfg_weight": 0.5,  # or "cfgw_input" - classifier-free guidance weight
+        "seed": 0,  # or "seed_num_input" - random seed for reproducibility
+        "speed": 1.0  # Speed multiplier (not in official API)
     }
     """
     input_data = event.get('input', {})
     
-    text = input_data.get('text') or input_data.get('prompt')  # Support both formats
-    language = input_data.get('language', 'en')
-    voice = input_data.get('voice')
+    # Support both simplified and official HuggingFace API parameter names
+    text = (input_data.get('text') or 
+            input_data.get('text_input') or 
+            input_data.get('prompt'))
+    
+    language = (input_data.get('language') or 
+                input_data.get('language_id') or 
+                'en')
+    
+    voice = (input_data.get('voice') or 
+             input_data.get('audio_prompt_path_input') or 
+             input_data.get('audio_prompt_path'))
+    
     format_type = input_data.get('format', 'mp3')
-    exaggeration = float(input_data.get('exaggeration', 0.7))
+    
+    # Use HuggingFace API defaults
+    exaggeration = float(input_data.get('exaggeration') or 
+                        input_data.get('exaggeration_input') or 
+                        0.5)
+    
+    temperature = float(input_data.get('temperature') or 
+                       input_data.get('temperature_input') or 
+                       0.8)
+    
+    cfg_weight = float(input_data.get('cfg_weight') or 
+                      input_data.get('cfgw_input') or 
+                      0.5)
+    
+    seed = input_data.get('seed') or input_data.get('seed_num_input')
+    if seed is not None:
+        seed = int(seed)
+    
     speed = float(input_data.get('speed', 1.0))
     
     if not text:
@@ -50,13 +81,17 @@ def handler(event):
     print(f"   Voice: {voice or 'default'}")
     print(f"   Format: {format_type}")
     print(f"   Exaggeration: {exaggeration}")
+    print(f"   Temperature: {temperature}")
+    print(f"   CFG Weight: {cfg_weight}")
+    if seed is not None:
+        print(f"   Seed: {seed}")
     
     try:
         start_time = time.time()
         
         # Generate cache key
         cache_key = hashlib.sha256(
-            f"{text}|{language}|{voice}|{format_type}|{exaggeration}|{speed}".encode()
+            f"{text}|{language}|{voice}|{format_type}|{exaggeration}|{temperature}|{cfg_weight}|{seed}|{speed}".encode()
         ).hexdigest()
         cache_file = CACHE_DIR / f"{cache_key}.{format_type}"
         
@@ -68,26 +103,29 @@ def handler(event):
             audio_base64 = base64.b64encode(audio_data).decode('utf-8')
             generation_time = 0
         else:
+            # Set random seed if provided
+            if seed is not None:
+                torch.manual_seed(seed)
+                if torch.cuda.is_available():
+                    torch.cuda.manual_seed(seed)
+                print(f"🎲 Set random seed: {seed}")
+            
             # Generate audio
             print(f"🔊 Generating audio...")
             
+            # Build generation parameters
+            gen_params = {
+                'language_id': language,
+                'exaggeration': exaggeration,
+                'temperature': temperature,
+                'cfg_weight': cfg_weight
+            }
+            
+            # Add voice if provided
             if voice and os.path.exists(voice):
-                audio_tensor = model.generate(
-                    text,
-                    language_id=language,
-                    audio_prompt_path=voice,
-                    exaggeration=exaggeration,
-                    temperature=0.8,
-                    cfg_weight=0.5
-                )
-            else:
-                audio_tensor = model.generate(
-                    text,
-                    language_id=language,
-                    exaggeration=exaggeration,
-                    temperature=0.8,
-                    cfg_weight=0.5
-                )
+                gen_params['audio_prompt_path'] = voice
+            
+            audio_tensor = model.generate(text, **gen_params)
             
             print(f"✅ Audio generated (shape: {audio_tensor.shape})")
             

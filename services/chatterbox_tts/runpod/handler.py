@@ -330,9 +330,28 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                 logger.info(f"  Chunk {i+1}/{chunks_processed}: '{chunk[:40]}...'")
                 
                 if voice:
-                    wav = model.generate(chunk, language_id=language, audio_prompt_path=voice, exaggeration=exaggeration)
+                    wav = model.generate(
+                        chunk,
+                        language_id=language,
+                        audio_prompt_path=voice,
+                        exaggeration=exaggeration,
+                        cfg_weight=0.5,
+                        temperature=0.8,
+                        repetition_penalty=2.0,
+                        min_p=0.05,
+                        top_p=1.0
+                    )
                 else:
-                    wav = model.generate(chunk, language_id=language, exaggeration=exaggeration)
+                    wav = model.generate(
+                        chunk,
+                        language_id=language,
+                        exaggeration=exaggeration,
+                        cfg_weight=0.5,
+                        temperature=0.8,
+                        repetition_penalty=2.0,
+                        min_p=0.05,
+                        top_p=1.0
+                    )
                 
                 audio_tensors.append(wav)
             

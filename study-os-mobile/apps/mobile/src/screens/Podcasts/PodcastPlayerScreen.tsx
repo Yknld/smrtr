@@ -10,6 +10,10 @@ import {
   ScrollView,
   PanResponder,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
@@ -22,11 +26,13 @@ import {
   generatePodcastAudio,
   getCachedPodcast,
   clearPodcastCache,
+  joinInPodcast,
   PodcastEpisode,
   PodcastSegment,
   PodcastStatus,
 } from '../../data/podcasts.repository';
 import { supabase } from '../../config/supabase';
+import { AssemblyLiveService, TranscriptEvent } from '../../services/assemblyLive';
 
 interface PodcastPlayerScreenProps {
   route: {
@@ -69,6 +75,9 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
   // Animation for play button
   const scaleAnim = useRef(new Animated.Value(1)).current;
   
+  // Animation for listening pulse
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  
   // Ref to throttle time updates (prevent re-renders on every frame)
   const lastTimeUpdateRef = useRef(0);
   const UPDATE_INTERVAL_MS = 500; // Update UI every 500ms
@@ -76,6 +85,37 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
   // Ref for transcript scrolling
   const transcriptScrollRef = useRef<ScrollView>(null);
   const segmentRefs = useRef<Map<number, View>>(new Map());
+  
+  // Join-in state
+  const [showJoinInModal, setShowJoinInModal] = useState(false);
+  const [joinInInput, setJoinInInput] = useState('');
+  const [isJoinInLoading, setIsJoinInLoading] = useState(false);
+  const [joinInSegments, setJoinInSegments] = useState<PodcastSegment[]>([]);
+  const [isPlayingJoinIn, setIsPlayingJoinIn] = useState(false);
+  
+  // Voice recording state
+  const [isListening, setIsListening] = useState(false);
+  const [partialTranscript, setPartialTranscript] = useState('');
+  const assemblyServiceRef = useRef<AssemblyLiveService | null>(null);
+  const joinInTranscriptScrollRef = useRef<ScrollView>(null);
+  
+  // Debug: Log button state
+  useEffect(() => {
+    const canSend = joinInInput.trim() && !isJoinInLoading && !isListening;
+    console.log(`🔘 Send button state: ${canSend ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`   - Text: "${joinInInput}" (${joinInInput.length} chars)`);
+    console.log(`   - Loading: ${isJoinInLoading}`);
+    console.log(`   - Listening: ${isListening}`);
+  }, [joinInInput, isJoinInLoading, isListening]);
+  
+  // Auto-scroll join-in transcript when text changes
+  useEffect(() => {
+    if ((joinInInput || partialTranscript) && joinInTranscriptScrollRef.current) {
+      setTimeout(() => {
+        joinInTranscriptScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [joinInInput, partialTranscript]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -84,11 +124,22 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
   };
 
   const togglePlayPause = async () => {
+    console.log('🎵 togglePlayPause called');
+    console.log('   - sound:', sound ? 'loaded' : 'null');
+    console.log('   - isPlaying:', isPlaying);
+    console.log('   - audioUrls length:', audioUrls.length);
+    console.log('   - currentSegmentIndex:', currentSegmentIndex);
+    
     try {
       if (!sound) {
-        console.log('No audio loaded yet');
+        console.log('❌ No audio loaded yet - cannot play');
+        console.log('   Debug: audioUrls[0]:', audioUrls[0]?.substring(0, 100));
         return;
       }
+
+      // Check sound status before playing
+      const soundStatus = await sound.getStatusAsync();
+      console.log('🔍 Sound status before play:', JSON.stringify(soundStatus, null, 2));
 
       // Animate button
       Animated.sequence([
@@ -105,14 +156,32 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
       ]).start();
 
       if (isPlaying) {
+        console.log('⏸️ Pausing...');
         await sound.pauseAsync();
         setIsPlaying(false);
+        console.log('✅ Paused');
       } else {
-        await sound.playAsync();
+        console.log('▶️ Playing...');
+        
+        // Ensure volume is at 1.0
+        await sound.setVolumeAsync(1.0);
+        console.log('🔊 Volume set to 1.0');
+        
+        const status = await sound.playAsync();
+        console.log('📊 Play status:', JSON.stringify({
+          isLoaded: status.isLoaded,
+          isPlaying: status.isPlaying,
+          positionMillis: status.positionMillis,
+          durationMillis: status.durationMillis,
+          volume: status.volume,
+        }, null, 2));
+        
         setIsPlaying(true);
+        console.log('✅ Set to playing state');
       }
     } catch (error) {
-      console.error('Error toggling playback:', error);
+      console.error('❌ Error toggling playback:', error);
+      console.error('   Error details:', JSON.stringify(error, null, 2));
     }
   };
 
@@ -160,10 +229,281 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
     // TODO: Save preference to backend
   };
 
-  const handleJoinMic = () => {
-    setIsInLiveSession(!isInLiveSession);
-    // TODO: Connect to live session with mic access
-    console.log('Toggle live mic session');
+  const handleJoinMic = async () => {
+    // Pause podcast when opening join-in modal
+    if (sound && isPlaying) {
+      await sound.pauseAsync();
+      setIsPlaying(false);
+    }
+    
+    // Reset state
+    setJoinInInput('');
+    setPartialTranscript('');
+    setShowJoinInModal(true);
+    
+    // DON'T auto-start - let user press Start button
+    // This gives them time to prepare and see the UI
+  };
+
+  const handleTranscriptEvent = useCallback((event: TranscriptEvent) => {
+    switch (event.type) {
+      case 'connected':
+        console.log('✅ AssemblyAI connected');
+        break;
+      
+      case 'partial':
+        if (event.text) {
+          console.log('📝 Partial:', event.text);
+          setPartialTranscript(event.text);
+        }
+        break;
+      
+      case 'final':
+        if (event.text) {
+          console.log('✅ Final:', event.text);
+          // Append final text to input
+          setJoinInInput(prev => {
+            const newText = prev ? `${prev} ${event.text}` : event.text;
+            console.log('💬 Accumulated text:', newText);
+            return newText;
+          });
+          setPartialTranscript('');
+        }
+        break;
+      
+      case 'error':
+        console.error('❌ Transcription error:', event.error);
+        alert(`Transcription error: ${event.error}`);
+        stopListening();
+        break;
+      
+      case 'disconnected':
+        console.log('🔌 AssemblyAI disconnected');
+        // When disconnected, move any remaining partial text to final
+        setPartialTranscript(prev => {
+          if (prev) {
+            console.log('📦 Moving partial to final on disconnect:', prev);
+            setJoinInInput(current => current ? `${current} ${prev}` : prev);
+          }
+          return '';
+        });
+        break;
+    }
+  }, []);
+
+  const startListening = async () => {
+    try {
+      console.log('🎤 Starting voice input...');
+      setIsListening(true);
+      
+      // Start pulse animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+      
+      // Request microphone permissions
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Microphone permission is required for voice input');
+        setIsListening(false);
+        pulseAnim.setValue(1);
+        return;
+      }
+
+      // Initialize AssemblyAI service
+      const service = new AssemblyLiveService(handleTranscriptEvent);
+      assemblyServiceRef.current = service;
+      
+      await service.start();
+      console.log('✅ Voice input started');
+    } catch (error: any) {
+      console.error('Failed to start voice input:', error);
+      alert(`Failed to start voice input: ${error.message}`);
+      setIsListening(false);
+      pulseAnim.setValue(1);
+    }
+  };
+
+  const stopListening = async () => {
+    try {
+      console.log('🛑 Stopping voice input...');
+      console.log('📊 Current state - joinInInput:', joinInInput, 'partialTranscript:', partialTranscript);
+      
+      // Move any remaining partial text to final input before stopping
+      setPartialTranscript(currentPartial => {
+        if (currentPartial) {
+          console.log('📦 Saving partial text before stop:', currentPartial);
+          setJoinInInput(prev => {
+            const newText = prev ? `${prev} ${currentPartial}` : currentPartial;
+            console.log('💾 New accumulated text:', newText);
+            return newText;
+          });
+        }
+        return '';
+      });
+      
+      if (assemblyServiceRef.current) {
+        await assemblyServiceRef.current.stop();
+        assemblyServiceRef.current = null;
+      }
+      
+      setIsListening(false);
+      
+      // Reset pulse animation
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+      
+      console.log('✅ Voice input stopped');
+    } catch (error) {
+      console.error('Error stopping voice input:', error);
+      setIsListening(false);
+      setPartialTranscript('');
+      pulseAnim.setValue(1);
+    }
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  const handleJoinInSubmit = async () => {
+    if (!joinInInput.trim() || !episode) {
+      return;
+    }
+
+    try {
+      // Stop listening first
+      if (isListening) {
+        await stopListening();
+      }
+
+      setIsJoinInLoading(true);
+      console.log('🎤 Submitting join-in question...');
+      console.log('   Episode ID:', episode.id);
+      console.log('   Lesson ID:', lessonId);
+      console.log('   Episode lesson_id:', episode.lessonId);
+      console.log('   Current segment:', currentSegmentIndex);
+      console.log('   Question:', joinInInput.trim());
+
+      // Call join-in API - use episode.lessonId if available, fallback to lessonId
+      const actualLessonId = episode.lessonId || lessonId;
+      console.log('   Using lesson ID:', actualLessonId);
+      
+      const newSegments = await joinInPodcast(
+        episode.id,
+        currentSegmentIndex,
+        joinInInput.trim(),
+        actualLessonId
+      );
+
+      setJoinInSegments(newSegments);
+      setIsPlayingJoinIn(true);
+      setShowJoinInModal(false);
+      setJoinInInput('');
+
+      console.log(`✅ Join-in segments created: ${newSegments.length}`);
+
+      // Poll for TTS completion and play
+      pollJoinInAudio(newSegments);
+
+    } catch (error: any) {
+      console.error('Failed to join in:', error);
+      alert(`Failed to join conversation: ${error.message}`);
+    } finally {
+      setIsJoinInLoading(false);
+    }
+  };
+
+  const handleCloseJoinInModal = async () => {
+    if (isListening) {
+      await stopListening();
+    }
+    setShowJoinInModal(false);
+    setJoinInInput('');
+    setPartialTranscript('');
+  };
+
+  const pollJoinInAudio = async (joinSegments: PodcastSegment[]) => {
+    const maxAttempts = 60; // 60 seconds max wait (TTS can be slow)
+    let attempts = 0;
+
+    const pollInterval = setInterval(async () => {
+      attempts++;
+      
+      try {
+        // Check if all segments are ready
+        const { data, error } = await supabase
+          .from('podcast_segments')
+          .select('id, tts_status, audio_path')
+          .in('id', joinSegments.map(s => s.id));
+
+        if (error) throw error;
+
+        const readyCount = data?.filter(seg => seg.tts_status === 'ready').length || 0;
+        const totalCount = data?.length || 0;
+        
+        if (attempts % 5 === 0) {
+          console.log(`⏳ Polling join-in audio: ${readyCount}/${totalCount} ready (${attempts}s)`);
+        }
+
+        const allReady = data?.every(seg => seg.tts_status === 'ready');
+
+        if (allReady) {
+          clearInterval(pollInterval);
+          console.log('✅ Join-in audio ready, playing...');
+          
+          // Fetch segments with signed URLs
+          const updatedSegments = await fetchPodcastSegments(episode!.id);
+          const joinInSegs = updatedSegments.filter(s => 
+            joinSegments.some(js => js.id === s.id)
+          );
+
+          console.log(`🎵 Playing ${joinInSegs.length} join-in segments`);
+          
+          // Play join-in segments
+          await playJoinInSegments(joinInSegs);
+        } else if (attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+          console.error(`⏱️ Timeout waiting for join-in audio: ${readyCount}/${totalCount} ready`);
+          alert(`Audio generation timed out. ${readyCount}/${totalCount} segments ready. Try a shorter question.`);
+          setIsPlayingJoinIn(false);
+        }
+      } catch (error) {
+        console.error('Error polling join-in audio:', error);
+      }
+    }, 1000);
+  };
+
+  const playJoinInSegments = async (joinSegments: PodcastSegment[]) => {
+    // TODO: Implement sequential playback of join-in segments
+    // For now, just log
+    console.log(`🎵 Playing ${joinSegments.length} join-in segments`);
+    
+    // After playing, resume original podcast
+    setTimeout(() => {
+      setIsPlayingJoinIn(false);
+      console.log('✅ Join-in complete, resuming podcast');
+      // Resume playback
+      if (sound) {
+        sound.playAsync();
+        setIsPlaying(true);
+      }
+    }, 5000); // Placeholder - should be actual audio duration
   };
 
   const handleDownload = () => {
@@ -253,6 +593,25 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
     })
   ).current;
 
+  // Configure audio session on mount
+  useEffect(() => {
+    const setupAudio = async () => {
+      try {
+        console.log('🔊 Setting up audio session...');
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+        console.log('✅ Audio session configured');
+      } catch (error) {
+        console.error('❌ Failed to setup audio:', error);
+      }
+    };
+    setupAudio();
+  }, []);
+
   // Load or create podcast episode
   useEffect(() => {
     let pollInterval: NodeJS.Timeout | null = null;
@@ -324,19 +683,26 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
             const durations = episodeSegments.map(seg => (seg.durationMs || 0) / 1000);
             setSegmentDurations(durations);
 
-            // Generate audio URLs for all segments
-            const urls = episodeSegments.map(seg => {
-              if (seg.audioPath) {
-                const { data } = supabase.storage
-                  .from('tts_audio')
-                  .getPublicUrl(seg.audioPath);
-                return data.publicUrl;
+            // Use signed URLs already generated in fetchPodcastSegments
+            // CRITICAL: Don't filter - keep array length same as segments for proper index alignment
+            const urls = episodeSegments.map((seg, idx) => {
+              if (!seg.signedUrl && seg.ttsStatus === 'ready') {
+                console.warn(`⚠️ Segment ${idx} (seq ${seg.seq}) is ready but has no signed URL!`);
+                console.warn(`   Bucket: ${seg.audioBucket}, Path: ${seg.audioPath}`);
               }
-              return '';
-            }).filter(url => url !== '');
+              return seg.signedUrl || '';
+            });
             
             setAudioUrls(urls);
-            console.log(`✅ Loaded ${urls.length} audio segments`);
+            const readyCount = urls.filter(u => u !== '').length;
+            console.log(`✅ Loaded ${readyCount}/${urls.length} audio segments`);
+            
+            // Debug: Log segments without URLs
+            episodeSegments.forEach((seg, idx) => {
+              if (!urls[idx] && seg.ttsStatus === 'ready') {
+                console.log(`🔍 Missing URL for segment ${idx}: status=${seg.ttsStatus}, bucket=${seg.audioBucket}, path=${seg.audioPath}`);
+              }
+            });
 
             setIsLoading(false);
           } else if (existingEpisode.status === 'failed') {
@@ -540,8 +906,21 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
 
   // Load audio when URLs are available
   useEffect(() => {
+    console.log(`🎧 Audio load useEffect triggered: urls=${audioUrls.length}, index=${currentSegmentIndex}`);
+    
     const loadAudio = async () => {
       if (audioUrls.length > 0 && currentSegmentIndex < audioUrls.length) {
+        // Skip segments without audio URLs
+        if (!audioUrls[currentSegmentIndex]) {
+          console.log(`⏭️  Skipping segment ${currentSegmentIndex + 1} (no audio)`);
+          if (currentSegmentIndex < audioUrls.length - 1) {
+            setCurrentSegmentIndex(prev => prev + 1);
+          }
+          return;
+        }
+        
+        console.log(`🎵 Loading audio for segment ${currentSegmentIndex + 1}/${audioUrls.length}`);
+        
         try {
           const startTime = Date.now();
           
@@ -557,6 +936,7 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
             // Use the preloaded sound
             setSound(nextSound);
             setNextSound(null);
+            console.log(`✅ Sound state set from preload (segment ${currentSegmentIndex + 1})`);
             
             // Update playback status
             if (isPlaying) {
@@ -583,12 +963,18 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
             
             const loadTime = Date.now() - startTime;
             setSound(newSound);
-            console.log(`✅ Loaded segment ${currentSegmentIndex + 1}/${audioUrls.length} in ${loadTime}ms${isPlaying ? ' (auto-playing)' : ''}`);
+            console.log(`✅ Sound state set (segment ${currentSegmentIndex + 1}/${audioUrls.length} in ${loadTime}ms)`);
+            console.log(`   Sound object:`, newSound ? 'created' : 'null');
           }
           
           // Preload next segment in background (for gapless playback)
-          if (currentSegmentIndex + 1 < audioUrls.length) {
-            const nextIndex = currentSegmentIndex + 1;
+          // Find next segment with audio
+          let nextIndex = currentSegmentIndex + 1;
+          while (nextIndex < audioUrls.length && !audioUrls[nextIndex]) {
+            nextIndex++;
+          }
+          
+          if (nextIndex < audioUrls.length) {
             console.log(`🔄 Preloading segment ${nextIndex + 1}...`);
             
             try {
@@ -645,10 +1031,22 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
       
       if (status.didJustFinish && !status.isLooping) {
         console.log(`🎵 Segment ${currentSegmentIndex + 1} finished`);
-        // Move to next segment
-        if (currentSegmentIndex < audioUrls.length - 1) {
-          console.log(`➡️  Moving to segment ${currentSegmentIndex + 2}/${audioUrls.length}`);
-          setCurrentSegmentIndex(prev => prev + 1);
+        
+        // IMPORTANT: Stop current sound before moving to next
+        if (sound) {
+          sound.stopAsync().catch(err => console.log('Stop error:', err));
+        }
+        
+        // Find next segment with audio
+        let nextIndex = currentSegmentIndex + 1;
+        while (nextIndex < audioUrls.length && !audioUrls[nextIndex]) {
+          console.log(`⏭️  Skipping segment ${nextIndex + 1} (no audio)`);
+          nextIndex++;
+        }
+        
+        if (nextIndex < audioUrls.length) {
+          console.log(`➡️  Moving to segment ${nextIndex + 1}/${audioUrls.length}`);
+          setCurrentSegmentIndex(nextIndex);
           // isPlaying state will remain true, so next segment auto-plays
         } else {
           console.log('✅ Podcast finished');
@@ -930,6 +1328,134 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
         {/* Bottom spacing */}
         <View style={styles.bottomSpacer} />
       </View>
+
+      {/* Join-In Modal */}
+      <Modal
+        visible={showJoinInModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCloseJoinInModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>🎤 Join the Conversation</Text>
+              <TouchableOpacity
+                onPress={handleCloseJoinInModal}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={28} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              {isListening 
+                ? "🎙️ Listening... Speak your question now" 
+                : joinInInput 
+                  ? "Tap 'Send' to submit, or 'Start' to add more" 
+                  : "Tap 'Start' to begin voice input"}
+            </Text>
+
+            {/* Listening Status */}
+            {isListening && (
+              <View style={styles.listeningIndicator}>
+                <Animated.View 
+                  style={[
+                    styles.listeningPulse,
+                    { transform: [{ scale: pulseAnim }] }
+                  ]}
+                >
+                  <Ionicons name="mic" size={32} color={colors.primary} />
+                </Animated.View>
+                <Text style={styles.listeningText}>Listening...</Text>
+              </View>
+            )}
+
+            {/* Transcript Display */}
+            <View style={styles.transcriptBox}>
+              <ScrollView 
+                ref={joinInTranscriptScrollRef}
+                style={styles.transcriptScroll}
+              >
+                {joinInInput && (
+                  <Text style={styles.finalTranscriptText}>{joinInInput}</Text>
+                )}
+                {partialTranscript && (
+                  <Text style={styles.partialTranscriptText}> {partialTranscript}</Text>
+                )}
+                {!joinInInput && !partialTranscript && (
+                  <Text style={styles.placeholderText}>
+                    Your transcript will appear here...
+                  </Text>
+                )}
+              </ScrollView>
+            </View>
+
+            <Text style={styles.modalCharCount}>
+              {joinInInput.length}/500
+            </Text>
+
+            {/* Control Buttons */}
+            <View style={styles.modalButtonRow}>
+              {/* Mic Toggle Button */}
+              <TouchableOpacity
+                style={[
+                  styles.micButton,
+                  isListening && styles.micButtonActive
+                ]}
+                onPress={toggleListening}
+                disabled={isJoinInLoading}
+              >
+                <Ionicons 
+                  name={isListening ? "mic" : "mic-outline"} 
+                  size={24} 
+                  color={isListening ? colors.background : colors.primary} 
+                />
+                <Text style={[
+                  styles.micButtonText,
+                  isListening && styles.micButtonTextActive
+                ]}>
+                  {isListening ? 'Stop' : 'Start'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Send Button */}
+              <TouchableOpacity
+                style={[
+                  styles.modalSubmitButton,
+                  (!joinInInput.trim() || isJoinInLoading || isListening) && styles.modalSubmitButtonDisabled
+                ]}
+                onPress={handleJoinInSubmit}
+                disabled={!joinInInput.trim() || isJoinInLoading || isListening}
+              >
+                {isJoinInLoading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <>
+                    <Ionicons name="send" size={20} color={colors.background} />
+                    <Text style={styles.modalSubmitText}>Send</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Join-In Playing Indicator */}
+      {isPlayingJoinIn && (
+        <View style={styles.joinInPlayingOverlay}>
+          <View style={styles.joinInPlayingCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.joinInPlayingText}>
+              Hosts are responding...
+            </Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -1197,5 +1723,169 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: spacing.xl,
+  },
+  // Join-In Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxl,
+    minHeight: 300,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    letterSpacing: -0.3,
+  },
+  modalCloseButton: {
+    padding: spacing.xs,
+  },
+  modalSubtitle: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    marginBottom: spacing.lg,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  listeningIndicator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  listeningPulse: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: `${colors.primary}20`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listeningText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  transcriptBox: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    minHeight: 120,
+    maxHeight: 200,
+  },
+  transcriptScroll: {
+    flex: 1,
+  },
+  finalTranscriptText: {
+    fontSize: 16,
+    color: colors.textPrimary,
+    lineHeight: 24,
+  },
+  partialTranscriptText: {
+    fontSize: 16,
+    color: colors.textTertiary,
+    fontStyle: 'italic',
+    lineHeight: 24,
+  },
+  placeholderText: {
+    fontSize: 15,
+    color: colors.textTertiary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: spacing.lg,
+  },
+  modalCharCount: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    textAlign: 'right',
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    alignItems: 'center',
+  },
+  micButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.xs,
+    flex: 1,
+  },
+  micButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  micButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  micButtonTextActive: {
+    color: colors.background,
+  },
+  modalSubmitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+    flex: 1,
+  },
+  modalSubmitButtonDisabled: {
+    backgroundColor: colors.border,
+    opacity: 0.5,
+  },
+  modalSubmitText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.background,
+  },
+  joinInPlayingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  joinInPlayingCard: {
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.xl,
+    padding: spacing.xxl,
+    alignItems: 'center',
+    gap: spacing.lg,
+    minWidth: 200,
+  },
+  joinInPlayingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    textAlign: 'center',
   },
 });

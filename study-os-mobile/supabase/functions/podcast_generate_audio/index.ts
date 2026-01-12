@@ -162,26 +162,39 @@ serve(async (req: Request) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Validate JWT and get user
+    // Try to validate JWT and get user (optional - service keys will fail)
     const jwt = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(jwt);
-
-    if (authError || !user) {
-      console.error(`[${requestId}] Auth validation failed:`, authError?.message);
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    let user = null;
+    let isServiceCall = false;
+    
+    // Check if it's a service role key
+    if (jwt === supabaseServiceKey) {
+      console.log(`[${requestId}] Service-to-service call detected`);
+      isServiceCall = true;
+    } else {
+      // Try to validate as user JWT
+      const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(jwt);
+      if (userData?.user) {
+        user = userData.user;
+        console.log(`[${requestId}] Authenticated user: ${user.id}`);
+      } else {
+        console.error(`[${requestId}] Auth validation failed:`, authError?.message);
+        return new Response(
+          JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
-    console.log(`[${requestId}] Authenticated user: ${user.id}`);
-
-    // Create client for database operations (with user context for RLS)
-    const supabaseClient = createClient(
-      supabaseUrl,
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    // Create client for database operations
+    // Use admin client for service calls, user client for user calls
+    const supabaseClient = isServiceCall 
+      ? supabaseAdmin
+      : createClient(
+          supabaseUrl,
+          Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+          { global: { headers: { Authorization: authHeader } } }
+        );
 
     // Parse request body
     const body: GenerateAudioRequest = await req.json();
@@ -196,13 +209,18 @@ serve(async (req: Request) => {
 
     console.log(`[${requestId}] Generating audio for episode: ${episode_id}`);
 
-    // Verify episode exists and belongs to user
-    const { data: episode, error: episodeError } = await supabaseClient
+    // Verify episode exists (and belongs to user if not service call)
+    let episodeQuery = supabaseClient
       .from("podcast_episodes")
       .select("id, user_id, status, total_segments")
-      .eq("id", episode_id)
-      .eq("user_id", user.id)
-      .single();
+      .eq("id", episode_id);
+    
+    // Only filter by user_id if this is a user call (not service-to-service)
+    if (!isServiceCall && user) {
+      episodeQuery = episodeQuery.eq("user_id", user.id);
+    }
+    
+    const { data: episode, error: episodeError } = await episodeQuery.single();
 
     if (episodeError || !episode) {
       console.error(`[${requestId}] Episode not found:`, episodeError);
@@ -212,7 +230,8 @@ serve(async (req: Request) => {
       );
     }
 
-    if (episode.status !== "voicing") {
+    // Check episode status (skip for service calls - they can add segments to ready episodes)
+    if (!isServiceCall && episode.status !== "voicing") {
       console.error(`[${requestId}] Episode not in voicing state: ${episode.status}`);
       return new Response(
         JSON.stringify({ error: `Episode must be in 'voicing' state, currently: ${episode.status}` }),
@@ -220,14 +239,24 @@ serve(async (req: Request) => {
       );
     }
 
+    if (isServiceCall) {
+      console.log(`[${requestId}] Service call - allowing TTS for episode in '${episode.status}' state`);
+    }
+
     // Get all queued segments for this episode
-    const { data: segments, error: segmentsError } = await supabaseClient
+    let segmentsQuery = supabaseClient
       .from("podcast_segments")
       .select("id, seq, speaker, text, tts_status")
       .eq("episode_id", episode_id)
-      .eq("user_id", user.id)
       .eq("tts_status", "queued")
       .order("seq", { ascending: true });
+    
+    // Only filter by user_id if not a service call
+    if (!isServiceCall && user) {
+      segmentsQuery = segmentsQuery.eq("user_id", user.id);
+    }
+    
+    const { data: segments, error: segmentsError } = await segmentsQuery;
 
     if (segmentsError) {
       console.error(`[${requestId}] Failed to fetch segments:`, segmentsError);
@@ -322,7 +351,8 @@ serve(async (req: Request) => {
         console.log(`[${requestId}] Step 4: ✓ Format: ${fileExt}, Size: ${binaryAudio.length} bytes`);
         
         // Upload to storage with explicit contentType
-        const audioPath = `podcasts/${user.id}/${episode_id}/seg_${segment.seq}_${segment.speaker}.${fileExt}`;
+        // Use episode.user_id instead of user.id (works for both service and user calls)
+        const audioPath = `podcasts/${episode.user_id}/${episode_id}/seg_${segment.seq}_${segment.speaker}.${fileExt}`;
         console.log(`[${requestId}] Step 5: Uploading to storage...`);
         console.log(`[${requestId}] Upload path: ${audioPath}`);
         console.log(`[${requestId}] Content type: ${uploadContentType}`);
@@ -339,7 +369,7 @@ serve(async (req: Request) => {
           console.error(`[${requestId}] Upload error message:`, uploadError.message);
           console.error(`[${requestId}] Upload error details:`, JSON.stringify(uploadError));
           
-          await supabaseClient
+          await supabaseAdmin
             .from("podcast_segments")
             .update({ tts_status: "failed" })
             .eq("id", segment.id);
@@ -349,8 +379,9 @@ serve(async (req: Request) => {
         console.log(`[${requestId}] Step 5: ✓ Upload successful`);
 
         // Update segment with audio info and mark as ready
+        // Use admin client to bypass RLS (works for both service and user calls)
         console.log(`[${requestId}] Step 6: Updating segment status to 'ready'...`);
-        await supabaseClient
+        const { error: updateError } = await supabaseAdmin
           .from("podcast_segments")
           .update({
             tts_status: "ready",
@@ -359,6 +390,11 @@ serve(async (req: Request) => {
             duration_ms: Math.floor(segment.text.length * 50), // Rough estimate: 50ms per char
           })
           .eq("id", segment.id);
+        
+        if (updateError) {
+          console.error(`[${requestId}] ✗ Failed to update segment ${segment.id}:`, updateError);
+          throw new Error(`Update failed: ${updateError.message}`);
+        }
         console.log(`[${requestId}] Step 6: ✓ Segment marked as ready`);
 
         console.log(`[${requestId}] ===== ✓ Successfully processed segment ${segment.seq} =====`);

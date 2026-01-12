@@ -253,73 +253,117 @@ serve(async (req: Request) => {
       }
     });
 
-    // Build prompt with improved structure
-    const styleInstruction = STYLE_PROMPTS[style];
-
+    // Build prompt - V2 with real conversational dynamics
     const prompt = `
-You are writing a spoken, engaging, two-host educational podcast script.
-This must sound like real people talking, not like a textbook.
+You are an expert educational podcast writer and producer.
+
+Your task is to generate a natural, engaging, two-person podcast script that sounds like real humans thinking out loud — not a lecture, not a summary, and not a Wikipedia article.
+
+This podcast is for students who want to learn efficiently but enjoy listening.
+
+CRITICAL GOAL:
+The conversation must show REAL INTELLECTUAL MOVEMENT.
+Hosts should question, clarify, disagree, correct themselves, and reframe ideas as the episode progresses.
 
 LESSON TITLE:
 ${lessonTitle}
 
-SOURCE MATERIAL (may be messy):
+LESSON CONTEXT (notes, transcript, or summary):
 ${context}
 
-STYLE MODE:
-${styleInstruction}
+HOST ROLES (FIXED — DO NOT CHANGE)
+Speaker A (Host):
+- Curious, energetic, leads the episode
+- Asks questions a smart student would ask
+- Occasionally oversimplifies ideas
 
-GOAL:
-Generate an ${duration_min}-minute episode that is:
-- energetic, varied, and natural to listen to
-- highly educational but NOT robotic
-- optimized for audio (short lines, contractions, rhythm)
+Speaker B (Co-Host):
+- More analytical and precise
+- Challenges assumptions
+- Clarifies, corrects, and adds nuance
+- Occasionally pushes back or reframes
 
-HOST ROLES (must be distinct):
-- Speaker A: structured teacher, keeps the thread, drives the outline.
-- Speaker B: relatable explainer, gives analogies, real-world examples, checks understanding, occasionally jokes lightly.
+STRUCTURE REQUIREMENTS (VERY IMPORTANT)
+The episode MUST follow this structure:
 
-HARD CONSTRAINTS:
-- Output MUST be valid JSON (no markdown).
-- Total length should match ~${duration_min} minutes of spoken audio.
-- Avoid long monologues: max 2 turns in a row per speaker.
-- Each line must be 6–22 words. (Short, spoken.)
-- Use contractions (we're, it's, don't).
-- No corporate tone. No "In conclusion" unless it's a quick recap.
-- Do NOT repeat the lesson title more than once.
-- Do NOT say "As an AI".
+1) Cold Open (1–2 turns)
+   - Start with an intriguing question, real-world scenario, or surprising claim
+   - NO generic greetings
 
-REQUIRED EPISODE STRUCTURE:
-1) Cold open hook (15–25 seconds): surprising fact, question, or relatable scenario.
-2) Why it matters (20–40 seconds).
-3) Main explanation in 3–5 sections, each with:
-   - a crisp explanation
-   - a concrete example or analogy
-   - a 1-question checkpoint ("Quick check: ...") with the other host answering
-4) Final recap (30–45 seconds): 3 bullet takeaways spoken out loud.
-5) Outro: "If you've got a question, ask—otherwise let's jump back in."
+2) Framing the Topic
+   - Why this topic matters
+   - What problem it helps solve
 
-STYLE MODES:
-- direct_review: ${styleInstruction}
-- friendly: ${styleInstruction}
-- exam: ${styleInstruction}
+3) Exploration Phase (core of episode)
+   - Back-and-forth discussion
+   - Include:
+     • Misconceptions
+     • Clarifications
+     • "Wait, is that actually true?" moments
+     • Concrete examples
+     • Tradeoffs and limitations
 
-OUTPUT JSON SCHEMA:
+4) Listener Question Segment
+   - Simulate 2–3 realistic student questions
+   - Hosts reason through answers, not just explain
+
+5) Synthesis
+   - Pull ideas together
+   - Reframe the topic more clearly than at the start
+
+6) Soft Outro
+   - Summarize key takeaways
+   - Invite follow-up questions naturally
+
+CONVERSATION RULES (THIS IS WHAT FIXES ROBOTIC OUTPUT)
+- Speakers must NOT alternate mechanically
+- Some responses should be short, some longer
+- Disagreements must feel real, not polite
+- Hosts can pause, rethink, or revise earlier statements
+- Avoid buzzwords unless explained
+- Avoid "As an AI…" or meta commentary
+- No emojis, no markdown
+- Spoken, conversational language only
+
+OPTIONAL: ADD NATURAL SPEECH TEXTURE
+Use these paralinguistic tags SPARINGLY (1-3 times total):
+- [laugh] - for genuinely funny moments
+- [chuckle] - for light amusement
+- [sigh] - for empathy or difficulty
+Only when it truly fits the moment.
+
+PACING & LENGTH
+Target duration: ${duration_min} minutes
+
+Guidelines:
+- Average 6–8 dialogue turns per minute
+- Each turn: 1–4 sentences max (5-30 words)
+- Prioritize clarity over coverage
+
+OUTPUT FORMAT (STRICT — REQUIRED)
+Return VALID JSON ONLY.
+
 {
-  "title": string,
+  "title": "Engaging, human-sounding episode title",
   "segments": [
-    {
-      "speaker": "a" | "b",
-      "text": string
-    }
+    { "speaker": "a", "text": "..." },
+    { "speaker": "b", "text": "..." }
   ]
 }
 
-QUALITY CHECK BEFORE YOU RETURN:
-- Does it sound like humans talking?
-- Does every section have at least one example?
-- Are there checkpoints every ~90–120 seconds?
-- Are lines short and speakable?
+Rules:
+- speaker must be lowercase "a" or "b"
+- segments must be ordered
+- no trailing commas
+- no markdown
+- no extra fields
+
+QUALITY CHECK (SELF-VERIFY BEFORE RESPONDING)
+Before responding, internally verify:
+- Does this sound like two smart people discovering ideas together?
+- Are there moments of challenge or correction?
+- Would this be enjoyable to listen to while walking or driving?
+If not, revise before outputting JSON.
 
 Return ONLY the JSON with no markdown code blocks.`;
 

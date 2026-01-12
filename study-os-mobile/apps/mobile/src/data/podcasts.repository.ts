@@ -530,18 +530,40 @@ export async function fetchPodcastSegments(episodeId: string): Promise<PodcastSe
     return [];
   }
 
-  // Generate signed URLs for segments with audio
+  // Generate public URLs for segments with audio
+  // Note: tts_audio bucket should be configured as public in Supabase
   const segments: PodcastSegment[] = [];
   
   for (const segment of data) {
     let signedUrl: string | undefined;
     
     if (segment.audio_bucket && segment.audio_path && segment.tts_status === 'ready') {
-      const { data: urlData } = await supabase.storage
+      // Try public URL first (faster, no auth needed if bucket is public)
+      const { data: publicUrlData } = supabase.storage
         .from(segment.audio_bucket)
-        .createSignedUrl(segment.audio_path, 7200); // 2 hours
+        .getPublicUrl(segment.audio_path);
+      
+      if (publicUrlData?.publicUrl) {
+        signedUrl = publicUrlData.publicUrl;
+        console.log(`✅ Generated public URL for segment ${segment.seq}`);
+      } else {
+        // Fallback to signed URL if public fails
+        const { data: urlData, error: urlError } = await supabase.storage
+          .from(segment.audio_bucket)
+          .createSignedUrl(segment.audio_path, 7200); // 2 hours
 
-      signedUrl = urlData?.signedUrl;
+        if (urlError) {
+          console.error(`❌ Failed to generate signed URL for segment ${segment.seq}:`, urlError);
+          console.error(`   Bucket: ${segment.audio_bucket}, Path: ${segment.audio_path}`);
+        } else if (urlData?.signedUrl) {
+          signedUrl = urlData.signedUrl;
+          console.log(`✅ Generated signed URL for segment ${segment.seq}`);
+        } else {
+          console.warn(`⚠️ No URL returned for segment ${segment.seq}`);
+        }
+      }
+    } else {
+      console.log(`⏭️ Segment ${segment.seq}: bucket=${segment.audio_bucket}, path=${segment.audio_path}, status=${segment.tts_status}`);
     }
 
     segments.push({
@@ -558,6 +580,7 @@ export async function fetchPodcastSegments(episodeId: string): Promise<PodcastSe
     });
   }
 
+  console.log(`📊 Fetched ${segments.length} segments, ${segments.filter(s => s.signedUrl).length} with URLs`);
   return segments;
 }
 
@@ -621,6 +644,71 @@ export async function preloadPodcast(lessonId: string): Promise<void> {
     console.error('Failed to pre-load podcast:', error);
     // Don't throw - pre-loading is best-effort
   }
+}
+
+/**
+ * Join in to podcast - ask a question and get AI response
+ */
+export async function joinInPodcast(
+  episodeId: string,
+  currentSegmentIndex: number,
+  userInput: string,
+  lessonId: string
+): Promise<PodcastSegment[]> {
+  console.log('🎤 Sending join-in request...');
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    throw new Error('User not authenticated');
+  }
+
+  const response = await fetch(
+    `${supabase.supabaseUrl}/functions/v1/podcast_join_in`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        episode_id: episodeId,
+        current_segment_index: currentSegmentIndex,
+        user_input: userInput,
+        lesson_id: lessonId,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('📥 Join-in response status:', response.status);
+    console.error('📥 Join-in response text:', errorText);
+    let errorData;
+    try {
+      errorData = JSON.parse(errorText);
+    } catch (e) {
+      throw new Error(`Failed to join podcast: ${errorText}`);
+    }
+    throw new Error(errorData.error || `Failed to join podcast: ${response.status}`);
+  }
+
+  const result = await response.json();
+  console.log(`✅ Join-in segments created: ${result.join_in_segments?.length || 0}`);
+
+  // Transform to PodcastSegment format
+  const segments: PodcastSegment[] = result.join_in_segments.map((seg: any) => ({
+    id: seg.id,
+    episodeId: seg.episode_id,
+    seq: seg.seq,
+    speaker: seg.speaker,
+    text: seg.text,
+    ttsStatus: seg.tts_status,
+    audioBucket: seg.audio_bucket,
+    audioPath: seg.audio_path,
+    durationMs: seg.duration_ms,
+  }));
+
+  return segments;
 }
 
 /**

@@ -63,9 +63,18 @@ def _load_model_singleton():
         # Set cache directory for model weights
         os.environ['TORCH_HOME'] = str(MODEL_CACHE_DIR)
         
+        # Get HuggingFace token if available
+        hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
+        if hf_token:
+            logger.info("Using HuggingFace token for model download")
+        
         from chatterbox.tts_turbo import ChatterboxTurboTTS
         
-        model = ChatterboxTurboTTS.from_pretrained(device=device_name)
+        # Load model with token if available
+        if hf_token:
+            model = ChatterboxTurboTTS.from_pretrained(device=device_name, token=hf_token)
+        else:
+            model = ChatterboxTurboTTS.from_pretrained(device=device_name)
         model_loaded = True
         
         load_time = time.time() - start_time

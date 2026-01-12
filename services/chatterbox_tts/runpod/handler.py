@@ -396,9 +396,8 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         # Determine mimetype
         mimetype = "audio/mpeg" if format == "mp3" else "audio/wav"
         
-        # Return result wrapped in "output" key as required by RunPod
+        # Return result
         result = {
-            "output": {
             "audio_base64": audio_base64,
             "mimetype": mimetype,
             "size_bytes": len(audio_bytes),
@@ -406,9 +405,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             "cache_key": cache_key[:16],  # First 16 chars for debugging
             "device": device_name,
             "chunks_processed": chunks_processed,
-                "generation_time_ms": generation_time_ms,
-                "duration_ms": int(len(audio_bytes) * 8 / 192)  # Rough estimate for 192kbps mp3
-            }
+            "generation_time_ms": generation_time_ms
         }
         
         logger.info(f"✓ Request complete in {generation_time_ms}ms (cache_hit={cache_hit})")
@@ -451,10 +448,10 @@ def health_check():
 # Start RunPod serverless handler
 # This blocks and listens for jobs from RunPod
 # NOTE: Must be at module level for RunPod to detect it
-    logger.info("Starting RunPod serverless handler...")
-    logger.info(f"Model loaded: {model_loaded}")
-    logger.info(f"Device: {device_name}")
-    logger.info(f"Cache dir: {CACHE_DIR}")
-    logger.info(f"Model cache dir: {MODEL_CACHE_DIR}")
-    
-    runpod.serverless.start({"handler": handler})
+logger.info("Starting RunPod serverless handler...")
+logger.info(f"Model loaded: {model_loaded}")
+logger.info(f"Device: {device_name}")
+logger.info(f"Cache dir: {CACHE_DIR}")
+logger.info(f"Model cache dir: {MODEL_CACHE_DIR}")
+
+runpod.serverless.start({"handler": handler})

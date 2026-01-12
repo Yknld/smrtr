@@ -61,6 +61,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy application code
 COPY services/chatterbox_tts/app /app/app
+COPY services/chatterbox_tts/runpod /app/runpod
 
 # Create cache directories
 RUN mkdir -p /tmp/tts_cache /models

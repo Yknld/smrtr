@@ -16,6 +16,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Set lowercase owner
+        id: owner
+        run: echo "lowercase=${OWNER,,}" >> $GITHUB_OUTPUT
+        env:
+          OWNER: ${{ github.repository_owner }}
+      
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       
@@ -33,16 +39,22 @@ jobs:
           file: ./services/chatterbox_tts/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/chatterbox-tts-turbo:latest
-            ghcr.io/${{ github.repository_owner }}/chatterbox-tts-turbo:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/chatterbox-tts-turbo:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/chatterbox-tts-turbo:buildcache,mode=max
+            ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-turbo:latest
+            ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-turbo:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-turbo:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-turbo:buildcache,mode=max
   
   build-multilingual:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      
+      - name: Set lowercase owner
+        id: owner
+        run: echo "lowercase=${OWNER,,}" >> $GITHUB_OUTPUT
+        env:
+          OWNER: ${{ github.repository_owner }}
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -61,7 +73,7 @@ jobs:
           file: ./services/chatterbox_tts_multilingual/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/chatterbox-tts-multilingual:latest
-            ghcr.io/${{ github.repository_owner }}/chatterbox-tts-multilingual:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/chatterbox-tts-multilingual:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/chatterbox-tts-multilingual:buildcache,mode=max
+            ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-multilingual:latest
+            ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-multilingual:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-multilingual:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-multilingual:buildcache,mode=max

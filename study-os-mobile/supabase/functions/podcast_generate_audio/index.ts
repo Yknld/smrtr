@@ -48,6 +48,7 @@ async function submitRunPodJob(
         format: 'mp3',
         speed,
         voice,
+        language: 'en', // Default to English for podcasts
       }
     })
   });

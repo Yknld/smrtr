@@ -55,7 +55,7 @@ def _load_model_singleton():
     
     try:
         start_time = time.time()
-        logger.info("Loading Chatterbox-Turbo model (singleton)...")
+        logger.info("Loading Chatterbox Multilingual model (23 languages, singleton)...")
         
         device_name = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Device: {device_name}")
@@ -68,11 +68,11 @@ def _load_model_singleton():
         if hf_token:
             logger.info("HuggingFace token found in environment (will be used automatically)")
         
-        from chatterbox.tts_turbo import ChatterboxTurboTTS
+        from chatterbox.mtl_tts import ChatterboxMultilingualTTS
         
-        # Load model - token will be read from environment automatically
-        # DO NOT pass token as parameter - it's not supported
-        model = ChatterboxTurboTTS.from_pretrained(device=device_name)
+        # Load multilingual model for support of 23 languages including Russian
+        # Token will be read from environment automatically
+        model = ChatterboxMultilingualTTS.from_pretrained(device=device_name)
         model_loaded = True
         
         load_time = time.time() - start_time
@@ -323,9 +323,9 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                 logger.info(f"  Chunk {i+1}/{chunks_processed}: '{chunk[:40]}...'")
                 
                 if voice:
-                    wav = model.generate(chunk, audio_prompt_path=voice)
+                    wav = model.generate(chunk, language_id=language, audio_prompt_path=voice)
                 else:
-                    wav = model.generate(chunk)
+                    wav = model.generate(chunk, language_id=language)
                 
                 audio_tensors.append(wav)
             

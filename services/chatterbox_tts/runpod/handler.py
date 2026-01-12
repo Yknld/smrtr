@@ -72,7 +72,7 @@ def _load_model_singleton():
         
         # Load model - token will be read from environment automatically
         # DO NOT pass token as parameter - it's not supported
-            model = ChatterboxTurboTTS.from_pretrained(device=device_name)
+        model = ChatterboxTurboTTS.from_pretrained(device=device_name)
         model_loaded = True
         
         load_time = time.time() - start_time
@@ -398,6 +398,25 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
 # Load model at module import time (singleton pattern)
 _load_model_singleton()
 
+# Health check handler for RunPod
+def health_check():
+    """
+    Health check endpoint for RunPod workers.
+    Returns model status and readiness.
+    """
+    global model_loaded, model, device_name
+    
+    status = {
+        "status": "healthy" if model_loaded else "unhealthy",
+        "model_loaded": model_loaded,
+        "device": device_name,
+        "ready": model_loaded and model is not None
+    }
+    
+    logger.info(f"Health check: {status}")
+    return status
+
+
 # Start RunPod serverless handler
 # This blocks and listens for jobs from RunPod
 if __name__ == "__main__":
@@ -407,4 +426,7 @@ if __name__ == "__main__":
     logger.info(f"Cache dir: {CACHE_DIR}")
     logger.info(f"Model cache dir: {MODEL_CACHE_DIR}")
     
-    runpod.serverless.start({"handler": handler})
+    runpod.serverless.start({
+        "handler": handler,
+        "return_aggregate_stream": True
+    })

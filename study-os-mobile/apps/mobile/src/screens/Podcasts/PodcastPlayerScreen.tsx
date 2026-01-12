@@ -92,6 +92,7 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
   const [isJoinInLoading, setIsJoinInLoading] = useState(false);
   const [joinInSegments, setJoinInSegments] = useState<PodcastSegment[]>([]);
   const [isPlayingJoinIn, setIsPlayingJoinIn] = useState(false);
+  const [wasPlayingBeforeJoinIn, setWasPlayingBeforeJoinIn] = useState(false);
   
   // Voice recording state
   const [isListening, setIsListening] = useState(false);
@@ -230,6 +231,9 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
   };
 
   const handleJoinMic = async () => {
+    // Save current playing state
+    setWasPlayingBeforeJoinIn(isPlaying);
+    
     // Pause podcast when opening join-in modal
     if (sound && isPlaying) {
       await sound.pauseAsync();
@@ -436,6 +440,17 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
     setShowJoinInModal(false);
     setJoinInInput('');
     setPartialTranscript('');
+    
+    // Resume playback if it was playing before modal opened
+    if (wasPlayingBeforeJoinIn && sound) {
+      try {
+        await sound.playAsync();
+        setIsPlaying(true);
+        console.log('✅ Resumed playback after closing join-in modal');
+      } catch (error) {
+        console.error('Error resuming playback:', error);
+      }
+    }
   };
 
   const pollJoinInAudio = async (joinSegments: PodcastSegment[]) => {

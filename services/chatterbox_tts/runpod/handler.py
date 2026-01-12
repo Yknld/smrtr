@@ -447,14 +447,14 @@ def health_check():
 
 # Start RunPod serverless handler
 # This blocks and listens for jobs from RunPod
-if __name__ == "__main__":
-    logger.info("Starting RunPod serverless handler...")
-    logger.info(f"Model loaded: {model_loaded}")
-    logger.info(f"Device: {device_name}")
-    logger.info(f"Cache dir: {CACHE_DIR}")
-    logger.info(f"Model cache dir: {MODEL_CACHE_DIR}")
-    
-    runpod.serverless.start({
-        "handler": handler,
-        "return_aggregate_stream": True
-    })
+# NOTE: Must be at module level for RunPod to detect it
+logger.info("Starting RunPod serverless handler...")
+logger.info(f"Model loaded: {model_loaded}")
+logger.info(f"Device: {device_name}")
+logger.info(f"Cache dir: {CACHE_DIR}")
+logger.info(f"Model cache dir: {MODEL_CACHE_DIR}")
+
+runpod.serverless.start({
+    "handler": handler,
+    "return_aggregate_stream": True
+})

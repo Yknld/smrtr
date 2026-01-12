@@ -407,7 +407,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         }
         
         logger.info(f"✓ Request complete in {generation_time_ms}ms (cache_hit={cache_hit})")
-        return result
+        return {"output": result}
         
     except Exception as e:
         logger.error(f"Handler error: {e}", exc_info=True)

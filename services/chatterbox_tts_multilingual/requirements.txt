@@ -1,0 +1,22 @@
+# Core dependencies
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
+python-multipart==0.0.12
+
+# Chatterbox TTS (installed from submodule)
+# Will be installed via: pip install -e ../../external/chatterbox
+
+# Audio processing
+torchaudio==2.5.0
+torch==2.5.0  # Will be replaced with CUDA version in GPU Dockerfile
+soundfile==0.12.1
+librosa==0.10.2
+pydub==0.25.1
+
+# RunPod serverless
+runpod==1.7.4
+
+# Utilities
+numpy==1.26.4
+cachetools==5.5.0

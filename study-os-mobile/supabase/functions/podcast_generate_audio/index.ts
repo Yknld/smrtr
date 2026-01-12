@@ -116,13 +116,13 @@ const RUNPOD_BASE_URL = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}`;
 const VOICE_CONFIG = {
   a: {
     speed: 1.0,                      // Normal speed for host
-    voice: null,                     // Use default voice (no reference audio)
-    description: "Host (Speaker A)"
+    voice: "/app/runpod/host_voice.flac",  // Custom host voice from user sample
+    description: "Host (Speaker A - Custom Voice)"
   },
   b: {
     speed: 1.05,                     // Slightly faster for co-host
-    voice: null,                     // Use default voice (no reference audio)
-    description: "Co-host (Speaker B)"
+    voice: "/app/runpod/male_en.flac",    // Reference audio for male voice
+    description: "Co-host (Speaker B - Male)"
   },
 };
 

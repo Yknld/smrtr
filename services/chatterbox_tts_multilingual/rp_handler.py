@@ -141,15 +141,26 @@ def handler(event):
             voice_temp_file = None
             if voice:
                 # Detect if voice is a file path or base64
-                # File paths are short (<256 chars typically), base64 is huge (>100KB for 10s audio)
-                is_file_path = len(voice) < 1000 and os.path.exists(voice)
-                
-                if is_file_path:
-                    # Voice is a file path
-                    gen_params['audio_prompt_path'] = voice
-                    print(f"✅ Using voice file: {voice}")
+                # File paths are short (<256 chars), base64 is huge (>100KB for 10s audio)
+                # Check length FIRST to avoid "file name too long" error
+                if len(voice) < 1000:
+                    # Might be a file path, check if it exists
+                    try:
+                        if os.path.exists(voice):
+                            gen_params['audio_prompt_path'] = voice
+                            print(f"✅ Using voice file: {voice}")
+                        else:
+                            # Short string but not a file, try base64
+                            voice_data = base64.b64decode(voice, validate=True)
+                            voice_temp_file = tempfile.NamedTemporaryFile(suffix='.flac', delete=False)
+                            voice_temp_file.write(voice_data)
+                            voice_temp_file.close()
+                            gen_params['audio_prompt_path'] = voice_temp_file.name
+                            print(f"✅ Decoded base64 voice reference ({len(voice_data)} bytes)")
+                    except Exception as e:
+                        print(f"⚠️  Voice processing error: {e}")
                 else:
-                    # Assume voice is base64 encoded audio
+                    # Long string, definitely base64
                     try:
                         voice_data = base64.b64decode(voice, validate=True)
                         voice_temp_file = tempfile.NamedTemporaryFile(suffix='.flac', delete=False)
@@ -160,7 +171,6 @@ def handler(event):
                     except Exception as e:
                         print(f"⚠️  Failed to decode voice base64: {e}")
                         print(f"   Voice string length: {len(voice)} chars")
-                        print(f"   First 50 chars: {voice[:50]}")
             
             audio_tensor = model.generate(text, **gen_params)
             

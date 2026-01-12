@@ -253,6 +253,11 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         "generation_time_ms": 1234
     }
     """
+    logger.info("="*80)
+    logger.info("HANDLER CALLED - Job received!")
+    logger.info(f"Job keys: {list(job.keys())}")
+    logger.info("="*80)
+    
     global model, model_loaded, device_name
     
     start_time = time.time()

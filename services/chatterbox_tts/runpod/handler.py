@@ -331,14 +331,14 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                 if not voice:
                     raise ValueError("Multilingual model requires 'voice' parameter (audio_prompt_path)")
                 
-                # Match multilingual_app.py generate call
+                # Match HuggingFace API /generate_tts_audio exactly
                 wav = model.generate(
-                    chunk,
+                    chunk,  # text is first positional arg
                     language_id=language,
                     audio_prompt_path=voice,
                     exaggeration=exaggeration,
-                    cfg_weight=0.5,
-                    temperature=0.8
+                    temperature=0.8,
+                    cfg_weight=0.5
                 )
                 
                 audio_tensors.append(wav)

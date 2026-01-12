@@ -55,21 +55,23 @@ def _load_model_singleton():
     
     try:
         start_time = time.time()
-        logger.info("Loading Chatterbox-Turbo model (English-only, fast)...")
+        logger.info("Loading Chatterbox-Turbo model (singleton)...")
         
-        # Set cache directory for model weights BEFORE any imports
+        device_name = "cuda" if torch.cuda.is_available() else "cpu"
+        logger.info(f"Device: {device_name}")
+        
+        # Set cache directory for model weights
         os.environ['TORCH_HOME'] = str(MODEL_CACHE_DIR)
         
-        # Determine device
-        if torch.cuda.is_available():
-            device_name = "cuda"
-        else:
-            device_name = "cpu"
-        logger.info(f"Device: {device_name}")
+        # Get HuggingFace token if available (will be read from environment by the library)
+        hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
+        if hf_token:
+            logger.info("HuggingFace token found in environment (will be used automatically)")
         
         from chatterbox.tts_turbo import ChatterboxTurboTTS
         
-        # Load Turbo model
+        # Load model - token will be read from environment automatically
+        # DO NOT pass token as parameter - it's not supported
         model = ChatterboxTurboTTS.from_pretrained(device=device_name)
         model_loaded = True
         
@@ -332,22 +334,10 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             for i, chunk in enumerate(chunks):
                 logger.info(f"  Chunk {i+1}/{chunks_processed}: '{chunk[:40]}...'")
                 
-                # Turbo: simple generate call
-                logger.info(f"  → Calling model.generate (voice={'yes' if voice else 'no'})")
-                logger.info(f"  → Model type: {type(model).__name__}")
-                logger.info(f"  → Text: '{chunk}'")
-                
-                try:
-                    if voice:
-                        logger.info(f"  → Generating with voice: {voice}")
-                        wav = model.generate(chunk, audio_prompt_path=voice)
-                    else:
-                        logger.info(f"  → Generating without voice")
-                        wav = model.generate(chunk)
-                    logger.info(f"  ✓ model.generate returned (shape={wav.shape if hasattr(wav, 'shape') else 'unknown'})")
-                except Exception as gen_error:
-                    logger.error(f"  ✗ model.generate failed: {gen_error}", exc_info=True)
-                    raise
+                if voice:
+                    wav = model.generate(chunk, audio_prompt_path=voice)
+                else:
+                    wav = model.generate(chunk)
                 
                 audio_tensors.append(wav)
             
@@ -441,11 +431,14 @@ def health_check():
 
 # Start RunPod serverless handler
 # This blocks and listens for jobs from RunPod
-# NOTE: Must be at module level for RunPod to detect it
-logger.info("Starting RunPod serverless handler...")
-logger.info(f"Model loaded: {model_loaded}")
-logger.info(f"Device: {device_name}")
-logger.info(f"Cache dir: {CACHE_DIR}")
-logger.info(f"Model cache dir: {MODEL_CACHE_DIR}")
-
-runpod.serverless.start({"handler": handler})
+if __name__ == "__main__":
+    logger.info("Starting RunPod serverless handler...")
+    logger.info(f"Model loaded: {model_loaded}")
+    logger.info(f"Device: {device_name}")
+    logger.info(f"Cache dir: {CACHE_DIR}")
+    logger.info(f"Model cache dir: {MODEL_CACHE_DIR}")
+    
+    runpod.serverless.start({
+        "handler": handler,
+        "return_aggregate_stream": True
+    })

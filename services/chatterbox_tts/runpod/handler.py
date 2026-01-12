@@ -122,7 +122,7 @@ def split_text_into_chunks(text: str, max_chars: int = MAX_CHARS_PER_CHUNK) -> l
     return chunks
 
 
-def generate_cache_key(text: str, voice: Optional[str], language: str, format: str, speed: float, seed: Optional[int], exaggeration: float = 0.5) -> str:
+def generate_cache_key(text: str, voice: Optional[str], language: str, format: str, speed: float, seed: Optional[int]) -> str:
     """
     Generate stable cache key from normalized input parameters.
     Uses SHA256 hash of concatenated parameters for consistent caching.
@@ -133,7 +133,6 @@ def generate_cache_key(text: str, voice: Optional[str], language: str, format: s
     language_normalized = language.strip().lower()
     format_normalized = format.strip().lower()
     speed_normalized = round(speed, 2)  # Round to 2 decimals for stability
-    exaggeration_normalized = round(exaggeration, 2)  # Round to 2 decimals for stability
     seed_normalized = seed if seed is not None else 0
     
     # Create stable key string
@@ -143,7 +142,6 @@ def generate_cache_key(text: str, voice: Optional[str], language: str, format: s
         language_normalized,
         format_normalized,
         str(speed_normalized),
-        str(exaggeration_normalized),
         str(seed_normalized)
     ]
     key_string = "|".join(key_parts)
@@ -239,7 +237,6 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         "language": "en (default)",
         "format": "mp3 (default) or wav",
         "speed": 1.0 (default, range 0.5-2.0),
-        "exaggeration": 0.5 (default, range 0.0-1.0, higher = more expressive),
         "seed": null or int (for reproducibility)
     }
     
@@ -255,11 +252,6 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         "generation_time_ms": 1234
     }
     """
-    logger.info("="*80)
-    logger.info("HANDLER CALLED - Job received!")
-    logger.info(f"Job keys: {list(job.keys())}")
-    logger.info("="*80)
-    
     global model, model_loaded, device_name
     
     start_time = time.time()
@@ -277,7 +269,6 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         language = job_input.get("language", "en")
         format = job_input.get("format", "mp3")
         speed = float(job_input.get("speed", 1.0))
-        exaggeration = float(job_input.get("exaggeration", 0.5))
         seed = job_input.get("seed", None)
         
         # Validate required fields
@@ -297,13 +288,10 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         if not 0.5 <= speed <= 2.0:
             return {"error": f"Invalid speed: {speed} (must be 0.5-2.0)"}
         
-        if not 0.0 <= exaggeration <= 1.0:
-            return {"error": f"Invalid exaggeration: {exaggeration} (must be 0.0-1.0)"}
-        
         logger.info(f"Processing request: '{text[:50]}...' (len={len(text)})")
         
         # Generate stable cache key
-        cache_key = generate_cache_key(text, voice, language, format, speed, seed, exaggeration)
+        cache_key = generate_cache_key(text, voice, language, format, speed, seed)
         cache_file = CACHE_DIR / f"{cache_key}.{format}"
         cache_hit = False
         

@@ -49,6 +49,7 @@ async function submitRunPodJob(
         speed,
         voice,
         language: 'en', // Default to English for podcasts
+        exaggeration: 0.7, // Higher exaggeration for more expressive, natural podcast voices
       }
     })
   });

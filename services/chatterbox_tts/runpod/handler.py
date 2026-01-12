@@ -332,28 +332,24 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             for i, chunk in enumerate(chunks):
                 logger.info(f"  Chunk {i+1}/{chunks_processed}: '{chunk[:40]}...'")
                 
-                # Multilingual model REQUIRES audio_prompt_path
-                if not voice:
-                    raise ValueError("Multilingual model requires 'voice' parameter (audio_prompt_path)")
-                
-                # Verify voice file exists
-                from pathlib import Path
-                voice_path = Path(voice)
-                if not voice_path.exists():
-                    raise FileNotFoundError(f"Voice file not found: {voice}")
-                logger.info(f"Using voice file: {voice} (exists: {voice_path.exists()}, size: {voice_path.stat().st_size} bytes)")
-                
-                # Match HuggingFace API /generate_tts_audio exactly
-                logger.info(f"Calling model.generate with language={language}, exaggeration={exaggeration}")
-                wav = model.generate(
-                    chunk,
-                    language_id=language,
-                    audio_prompt_path=voice,
-                    exaggeration=exaggeration,
-                    temperature=0.8,
-                    cfg_weight=0.5
-                )
-                logger.info(f"Generation complete for chunk {i+1}")
+                # Multilingual: simple like Turbo but with language_id + HF API params
+                if voice:
+                    wav = model.generate(
+                        chunk,
+                        language_id=language,
+                        audio_prompt_path=voice,
+                        exaggeration=exaggeration,
+                        temperature=0.8,
+                        cfg_weight=0.5
+                    )
+                else:
+                    wav = model.generate(
+                        chunk,
+                        language_id=language,
+                        exaggeration=exaggeration,
+                        temperature=0.8,
+                        cfg_weight=0.5
+                    )
                 
                 audio_tensors.append(wav)
             

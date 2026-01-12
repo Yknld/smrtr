@@ -57,21 +57,19 @@ def _load_model_singleton():
         start_time = time.time()
         logger.info("Loading Chatterbox Multilingual model (23 languages, singleton)...")
         
-        device_name = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info(f"Device: {device_name}")
-        
-        # Set cache directory for model weights
+        # Set cache directory for model weights BEFORE any imports
         os.environ['TORCH_HOME'] = str(MODEL_CACHE_DIR)
         
-        # Get HuggingFace token if available (will be read from environment by the library)
-        hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
-        if hf_token:
-            logger.info("HuggingFace token found in environment (will be used automatically)")
+        # Determine device - match example_tts.py exactly
+        if torch.cuda.is_available():
+            device_name = "cuda"
+        else:
+            device_name = "cpu"
+        logger.info(f"Device: {device_name}")
         
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
         
-        # Load multilingual model for support of 23 languages including Russian
-        # Token will be read from environment automatically
+        # Load multilingual model exactly as in example_tts.py
         model = ChatterboxMultilingualTTS.from_pretrained(device=device_name)
         model_loaded = True
         
@@ -329,29 +327,19 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             for i, chunk in enumerate(chunks):
                 logger.info(f"  Chunk {i+1}/{chunks_processed}: '{chunk[:40]}...'")
                 
-                if voice:
-                    wav = model.generate(
-                        chunk,
-                        language_id=language,
-                        audio_prompt_path=voice,
-                        exaggeration=exaggeration,
-                        cfg_weight=0.5,
-                        temperature=0.8,
-                        repetition_penalty=2.0,
-                        min_p=0.05,
-                        top_p=1.0
-                    )
-                else:
-                    wav = model.generate(
-                        chunk,
-                        language_id=language,
-                        exaggeration=exaggeration,
-                        cfg_weight=0.5,
-                        temperature=0.8,
-                        repetition_penalty=2.0,
-                        min_p=0.05,
-                        top_p=1.0
-                    )
+                # Multilingual model REQUIRES audio_prompt_path
+                if not voice:
+                    raise ValueError("Multilingual model requires 'voice' parameter (audio_prompt_path)")
+                
+                # Match multilingual_app.py generate call
+                wav = model.generate(
+                    chunk,
+                    language_id=language,
+                    audio_prompt_path=voice,
+                    exaggeration=exaggeration,
+                    cfg_weight=0.5,
+                    temperature=0.8
+                )
                 
                 audio_tensors.append(wav)
             

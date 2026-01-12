@@ -140,9 +140,11 @@ def handler(event):
             # Handle voice reference (file path or base64)
             voice_temp_file = None
             if voice:
-                if os.path.exists(voice):
+                # Check if it looks like a file path (starts with / or contains .)
+                if voice.startswith('/') and os.path.exists(voice):
                     # Voice is a file path
                     gen_params['audio_prompt_path'] = voice
+                    print(f"✅ Using voice file: {voice}")
                 else:
                     # Assume voice is base64 encoded audio
                     try:

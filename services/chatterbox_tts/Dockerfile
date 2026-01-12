@@ -66,6 +66,12 @@ COPY services/chatterbox_tts/runpod /app/runpod
 # Create cache directories
 RUN mkdir -p /tmp/tts_cache /models
 
-# RunPod serverless uses the handler.py directly, not FastAPI
-# No port exposure or health check needed for serverless
-CMD ["python", "-u", "/app/runpod/handler.py"]
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run FastAPI server
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

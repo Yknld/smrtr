@@ -149,10 +149,15 @@ def handler(event):
                     
                     # Convert to MP3 using ffmpeg
                     import subprocess
-                    subprocess.run([
+                    result = subprocess.run([
                         'ffmpeg', '-i', wav_file, '-codec:a', 'libmp3lame',
                         '-b:a', '128k', '-y', tmp_file.name
-                    ], check=True, capture_output=True)
+                    ], capture_output=True, text=True)
+                    
+                    if result.returncode != 0:
+                        print(f"❌ FFmpeg error: {result.stderr}")
+                        raise Exception(f"FFmpeg conversion failed: {result.stderr}")
+                    
                     os.remove(wav_file)
                 
                 # Read the audio file

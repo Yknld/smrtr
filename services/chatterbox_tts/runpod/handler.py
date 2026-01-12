@@ -72,7 +72,7 @@ def _load_model_singleton():
         
         # Load model - token will be read from environment automatically
         # DO NOT pass token as parameter - it's not supported
-        model = ChatterboxTurboTTS.from_pretrained(device=device_name)
+            model = ChatterboxTurboTTS.from_pretrained(device=device_name)
         model_loaded = True
         
         load_time = time.time() - start_time
@@ -184,6 +184,45 @@ def concatenate_audio_tensors(tensors: list[torch.Tensor]) -> torch.Tensor:
     device = tensors[0].device
     tensors = [t.to(device) for t in tensors]
     return torch.cat(tensors, dim=-1)
+
+
+def trim_silence(wav_tensor: torch.Tensor, threshold: float = 0.01, frame_length: int = 2048) -> torch.Tensor:
+    """
+    Trim leading and trailing silence from audio tensor.
+    
+    Args:
+        wav_tensor: Audio tensor (1D or 2D)
+        threshold: Amplitude threshold for silence detection (0.01 = 1% of max amplitude)
+        frame_length: Window size for silence detection
+    
+    Returns:
+        Trimmed audio tensor
+    """
+    if wav_tensor.ndim == 2:
+        wav_tensor = wav_tensor.squeeze(0)
+    
+    # Calculate absolute amplitude
+    abs_wav = torch.abs(wav_tensor)
+    
+    # Find non-silent regions
+    non_silent = abs_wav > threshold
+    
+    if not non_silent.any():
+        # If entire audio is silent, return a tiny slice to avoid empty audio
+        return wav_tensor[:100]
+    
+    # Find first and last non-silent samples
+    non_silent_indices = torch.where(non_silent)[0]
+    start_idx = max(0, non_silent_indices[0].item() - frame_length // 2)
+    end_idx = min(len(wav_tensor), non_silent_indices[-1].item() + frame_length // 2)
+    
+    trimmed = wav_tensor[start_idx:end_idx]
+    
+    # Ensure we return at least some audio
+    if len(trimmed) < 100:
+        return wav_tensor[:100]
+    
+    return trimmed.unsqueeze(0) if wav_tensor.ndim == 2 else trimmed
 
 
 def handler(job: Dict[str, Any]) -> Dict[str, Any]:
@@ -302,6 +341,11 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                     orig_freq=model.sr,
                     new_freq=new_sample_rate
                 )
+            
+            # Trim silence from beginning and end
+            logger.info(f"Trimming silence (original length: {full_audio.shape[-1]} samples)...")
+            full_audio = trim_silence(full_audio, threshold=0.01)
+            logger.info(f"After trimming: {full_audio.shape[-1]} samples")
             
             # Convert to bytes
             audio_bytes = audio_tensor_to_bytes(full_audio, model.sr, format)

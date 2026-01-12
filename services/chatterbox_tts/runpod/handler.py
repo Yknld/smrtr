@@ -331,15 +331,24 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                 if not voice:
                     raise ValueError("Multilingual model requires 'voice' parameter (audio_prompt_path)")
                 
+                # Verify voice file exists
+                from pathlib import Path
+                voice_path = Path(voice)
+                if not voice_path.exists():
+                    raise FileNotFoundError(f"Voice file not found: {voice}")
+                logger.info(f"Using voice file: {voice} (exists: {voice_path.exists()}, size: {voice_path.stat().st_size} bytes)")
+                
                 # Match HuggingFace API /generate_tts_audio exactly
+                logger.info(f"Calling model.generate with language={language}, exaggeration={exaggeration}")
                 wav = model.generate(
-                    chunk,  # text is first positional arg
+                    chunk,
                     language_id=language,
                     audio_prompt_path=voice,
                     exaggeration=exaggeration,
                     temperature=0.8,
                     cfg_weight=0.5
                 )
+                logger.info(f"Generation complete for chunk {i+1}")
                 
                 audio_tensors.append(wav)
             

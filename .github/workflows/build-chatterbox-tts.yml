@@ -1,0 +1,58 @@
+name: Build Chatterbox TTS Docker Image
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'services/chatterbox_tts/**'
+      - 'external/chatterbox/**'
+      - '.github/workflows/build-chatterbox-tts.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  # Note: Building only GPU image due to GitHub Actions disk space limits
+  # This image works for both Pods AND Serverless deployments
+  build-gpu:
+    name: Build GPU Image (Works for Pods & Serverless)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive  # Initialize Chatterbox submodule
+          fetch-depth: 0  # Fetch all history for submodules
+      
+      - name: Initialize submodules
+        run: |
+          git submodule update --init --recursive
+          ls -la external/chatterbox/
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Build and push GPU image (works for both Pods & Serverless)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/chatterbox_tts/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:gpu
+            ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:serverless
+            ${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/chatterbox-tts:buildcache,mode=max
+      
+      - name: Image digest
+        run: |
+          echo "✅ Image pushed successfully!"
+          echo "Tags: latest, gpu, serverless"
+          echo "Use for both RunPod Pods AND Serverless deployments"

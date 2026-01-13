@@ -32,10 +32,11 @@ async function submitRunPodJob(
   text: string,
   speed: number,
   voice: string | null,
+  language: string,
   apiKey: string,
   requestId: string
 ): Promise<string> {
-  console.log(`[${requestId}] Submitting TTS job to RunPod (voice: ${voice})...`);
+  console.log(`[${requestId}] Submitting TTS job to RunPod (lang: ${language}, voice: ${voice})...`);
   const submitResponse = await fetch(`${RUNPOD_BASE_URL}/run`, {
     method: 'POST',
     headers: {
@@ -48,7 +49,7 @@ async function submitRunPodJob(
         format: 'mp3',
         speed,
         voice,
-        language: 'en', // Default to English for podcasts
+        language, // Support multiple languages (en, ru, etc.)
         exaggeration: 0.7, // Higher exaggeration for more expressive, natural podcast voices
       }
     })
@@ -110,23 +111,22 @@ async function pollRunPodJob(
   throw new Error(`RunPod job timed out after ${MAX_POLL_ATTEMPTS} attempts`);
 }
 
-// RunPod Chatterbox TTS Configuration
-const RUNPOD_ENDPOINT_ID = "70sq2akye030kh";
+// RunPod Chatterbox Multilingual TTS Configuration
+const RUNPOD_ENDPOINT_ID = "f1hyps48e61yf7"; // Multilingual model (23 languages)
 const RUNPOD_BASE_URL = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}`;
 
 // Voice configurations for speakers
-// NOTE: Multilingual model REQUIRES audio_prompt_path (unlike Turbo which has defaults)
-// Using host_voice.flac (8.89s) for both speakers until we get more 5+ second samples
+// Using natural human voices (8s samples)
 const VOICE_CONFIG = {
   a: {
     speed: 1.0,                      // Normal speed for host
-    voice: "/app/runpod/host_voice.flac",  // Custom 8.89s voice sample
-    description: "Host (Speaker A - Custom Voice)"
+    voice: "/app/runpod/male_en.flac",  // Male voice (8.9s)
+    description: "Host (Speaker A - Male Voice)"
   },
   b: {
-    speed: 1.05,                     // Slightly faster for co-host
-    voice: "/app/runpod/host_voice.flac",  // Same voice, different speed creates variety
-    description: "Co-host (Speaker B - Same Voice, Different Speed)"
+    speed: 1.0,                      // Normal speed for co-host
+    voice: "/app/runpod/female_en.flac",  // Female voice (8.0s)
+    description: "Co-host (Speaker B - Female Voice)"
   },
 };
 
@@ -162,7 +162,7 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log(`[${requestId}] Using RunPod Chatterbox TTS (Endpoint: ${RUNPOD_ENDPOINT_ID})`);
+    console.log(`[${requestId}] Using RunPod Chatterbox Multilingual TTS (Endpoint: ${RUNPOD_ENDPOINT_ID})`);
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -216,7 +216,7 @@ serve(async (req: Request) => {
     // Verify episode exists (and belongs to user if not service call)
     let episodeQuery = supabaseClient
       .from("podcast_episodes")
-      .select("id, user_id, status, total_segments")
+      .select("id, user_id, status, total_segments, language")
       .eq("id", episode_id);
     
     // Only filter by user_id if this is a user call (not service-to-service)
@@ -301,6 +301,7 @@ serve(async (req: Request) => {
           segment.text,
           voiceConfig.speed,
           voiceConfig.voice,
+          episode.language || 'en', // Use episode language, default to English
           runpodApiKey,
           requestId
         );

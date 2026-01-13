@@ -1,0 +1,39 @@
+# Exports and rendered files
+exports/*
+!exports/.gitkeep
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Temporary files
+*.tmp
+*.cache
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project-specific (adjust as needed)
+*.aep
+*.aepx
+*.prproj
+
+# Test files
+test_*.json
+test_output.mp4

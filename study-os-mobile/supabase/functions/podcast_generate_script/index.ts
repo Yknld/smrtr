@@ -382,7 +382,14 @@ Return ONLY the JSON with no markdown code blocks.`;
         const response = await result.response;
         let responseText = response.text();
 
+        // Check if response is valid
+        if (!responseText || responseText === 'undefined' || responseText.trim().length === 0) {
+          console.error(`[${requestId}] Empty or invalid response from Gemini`);
+          throw new Error("Empty response from Gemini");
+        }
+
         console.log(`[${requestId}] Gemini response received (${responseText.length} chars)`);
+        console.log(`[${requestId}] Response preview: ${responseText.substring(0, 200)}...`);
 
         // Clean up response (remove markdown code blocks if present)
         responseText = responseText

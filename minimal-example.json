@@ -1,0 +1,63 @@
+{
+  "course": {
+    "name": "My Course",
+    "pathBreadcrumbs": ["Home", "My Course", "First Lecture"]
+  },
+  "lecture": {
+    "number": 1,
+    "totalLectures": 5,
+    "title": "Introduction to the Topic",
+    "topic": "Learn the basics of this important subject.",
+    "rating": 4.5
+  },
+  "notes": {
+    "keyTakeaways": [
+      "Understanding the fundamentals",
+      "Key concept number two",
+      "Important point number three"
+    ],
+    "concepts": [
+      {
+        "title": "Main Concept",
+        "plainExplanation": "This is the main concept you need to understand.",
+        "bullets": [
+          "Important detail about the concept",
+          "Another important detail"
+        ],
+        "example": "For example, when you do X, Y happens.",
+        "whyItMatters": "This matters because it helps you understand Z."
+      }
+    ]
+  },
+  "quiz": {
+    "question": "What is the main concept?",
+    "options": [
+      {
+        "id": "A",
+        "text": "Option A - First choice"
+      },
+      {
+        "id": "B",
+        "text": "Option B - Second choice (correct)"
+      },
+      {
+        "id": "C",
+        "text": "Option C - Third choice"
+      }
+    ],
+    "answerId": "B",
+    "explanation": "Option B is correct because it best explains the main concept."
+  },
+  "wrapUp": {
+    "summaryBullets": [
+      "You learned about the main concept",
+      "You understand the key takeaways"
+    ],
+    "nextSteps": [
+      "Practice with the examples",
+      "Move on to the next lecture"
+    ],
+    "ctaPrimary": "Next Lecture",
+    "ctaSecondary": "Review Notes"
+  }
+}

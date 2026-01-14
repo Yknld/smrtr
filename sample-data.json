@@ -1,0 +1,151 @@
+{
+  "course": {
+    "name": "Data Science 101",
+    "pathBreadcrumbs": ["Home", "Data Science 101", "Linear Regression Essentials"]
+  },
+  "lecture": {
+    "number": 1,
+    "totalLectures": 10,
+    "title": "Linear Regression Essentials",
+    "topic": "Study concepts that explain how linear regression models and how they work.",
+    "date": "2024-01-15",
+    "duration": "15 minutes",
+    "rating": 4.5
+  },
+  "video": {
+    "posterUrl": "",
+    "videoUrl": "",
+    "chapters": [
+      {
+        "title": "Introduction",
+        "startTime": 0
+      },
+      {
+        "title": "Core Concepts",
+        "startTime": 120
+      },
+      {
+        "title": "Examples",
+        "startTime": 300
+      }
+    ]
+  },
+  "notes": {
+    "keyTakeaways": [
+      "Linear regression models the relationship between independent and dependent variables",
+      "The least squares method finds the best-fitting line by minimizing the sum of squared residuals",
+      "R² (coefficient of determination) measures how well the model fits the data",
+      "Linear regression assumes a linear relationship and normally distributed errors"
+    ],
+    "concepts": [
+      {
+        "title": "Least Squares Method",
+        "plainExplanation": "The least squares method is a mathematical approach used to find the best-fitting line through a set of data points. It minimizes the sum of the squares of the vertical distances (residuals) between the observed values and the values predicted by the line.",
+        "bullets": [
+          "Minimizes the sum of squared residuals",
+          "Provides a unique solution for the regression line",
+          "Works well when errors are normally distributed"
+        ],
+        "example": "If you have data points (1,2), (2,4), (3,5), the least squares method finds the line y = 1.5x + 0.5 that best fits these points.",
+        "whyItMatters": "This method is fundamental because it provides an objective way to determine the 'best' line, making it the standard approach in statistical analysis and machine learning."
+      },
+      {
+        "title": "Coefficient of Determination (R²)",
+        "plainExplanation": "R² is a statistical measure that represents the proportion of variance in the dependent variable that can be explained by the independent variable(s). It ranges from 0 to 1, where 1 indicates a perfect fit.",
+        "bullets": [
+          "Ranges from 0 to 1",
+          "R² = 1 means perfect fit (all points on the line)",
+          "R² = 0 means the model explains no variance",
+          "Higher R² indicates better model fit"
+        ],
+        "example": "If R² = 0.85, it means 85% of the variance in the dependent variable can be explained by the independent variable.",
+        "whyItMatters": "R² helps you understand how well your model performs and whether it's useful for making predictions. It's a key metric for model evaluation."
+      },
+      {
+        "title": "Slope and Intercept",
+        "plainExplanation": "In the equation y = mx + b, 'm' is the slope (how steep the line is) and 'b' is the y-intercept (where the line crosses the y-axis when x = 0).",
+        "bullets": [
+          "Slope (m): Change in y for each unit change in x",
+          "Intercept (b): Value of y when x = 0",
+          "Positive slope means y increases as x increases",
+          "Negative slope means y decreases as x increases"
+        ],
+        "example": "In y = 2x + 3, the slope is 2 (line goes up 2 units for each 1 unit right) and the intercept is 3 (line crosses y-axis at y=3).",
+        "whyItMatters": "Understanding slope and intercept helps you interpret what your model is telling you about the relationship between variables."
+      },
+      {
+        "title": "Residuals",
+        "plainExplanation": "Residuals are the differences between the observed values and the values predicted by the regression line. They represent the error in the model's predictions.",
+        "bullets": [
+          "Residual = Observed value - Predicted value",
+          "Good models have small, randomly distributed residuals",
+          "Patterns in residuals suggest the model may be missing something",
+          "Residuals should be normally distributed for valid statistical inference"
+        ],
+        "example": "If the model predicts y = 5 for a point, but the actual value is y = 6, the residual is 6 - 5 = 1.",
+        "whyItMatters": "Analyzing residuals helps you diagnose problems with your model and understand where it's making errors."
+      }
+    ]
+  },
+  "diagram": {
+    "title": "Linear Regression Visualization",
+    "description": "Adjust the controls to see how different parameters affect the regression line. Try changing the slope and intercept to understand their impact on the model.",
+    "labels": [
+      {
+        "name": "Independent Variable (X)",
+        "desc": "The input variable that we use to predict the dependent variable."
+      },
+      {
+        "name": "Dependent Variable (Y)",
+        "desc": "The output variable that we're trying to predict or explain."
+      },
+      {
+        "name": "Slope (m)",
+        "desc": "How steep the line is. Represents the rate of change."
+      },
+      {
+        "name": "Intercept (b)",
+        "desc": "The starting value of the line when X = 0."
+      }
+    ]
+  },
+  "quiz": {
+    "question": "What is the primary goal of linear regression?",
+    "options": [
+      {
+        "id": "A",
+        "text": "To classify data into categories"
+      },
+      {
+        "id": "B",
+        "text": "To find the best-fitting line for data"
+      },
+      {
+        "id": "C",
+        "text": "To reduce the number of features in a dataset"
+      },
+      {
+        "id": "D",
+        "text": "To normalize data distributions"
+      }
+    ],
+    "answerId": "B",
+    "explanation": "Linear regression aims to find the best-fitting straight line through a set of data points. This line minimizes the sum of squared residuals, allowing us to make predictions about the dependent variable based on the independent variable(s)."
+  },
+  "wrapUp": {
+    "summaryBullets": [
+      "Linear regression models relationships between variables using a straight line",
+      "The least squares method finds the optimal line by minimizing residuals",
+      "R² measures how well the model explains the variance in the data",
+      "Understanding slope and intercept helps interpret model predictions"
+    ],
+    "nextSteps": [
+      "Practice calculating regression coefficients manually",
+      "Explore multiple linear regression with more than one independent variable",
+      "Learn about assumptions and when linear regression is appropriate",
+      "Try implementing linear regression in Python or R"
+    ],
+    "ctaPrimary": "Next Lecture",
+    "ctaSecondary": "Review Weak Spots"
+  }
+}

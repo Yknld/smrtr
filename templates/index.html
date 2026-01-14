@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartrVideo - Educational Video Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .veo-status {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 500;
+            margin-bottom: 30px;
+        }
+        
+        .veo-status.available {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .veo-status.unavailable {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        input[type="text"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 16px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="text"]:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #4a90e2;
+        }
+        
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+        
+        button {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #4a90e2;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #357abd;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(74, 144, 226, 0.3);
+        }
+        
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4a90e2;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .results {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .results.active {
+            display: block;
+        }
+        
+        .results-header {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .scene-card {
+            background: #f8f9fa;
+            border-left: 4px solid #4a90e2;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        
+        .scene-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .scene-id {
+            font-weight: 600;
+            color: #4a90e2;
+        }
+        
+        .scene-duration {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .scene-narration {
+            color: #333;
+            margin-top: 8px;
+            font-style: italic;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #c33;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .error.active {
+            display: block;
+        }
+        
+        .video-preview {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .video-placeholder {
+            width: 100%;
+            max-width: 800px;
+            height: 450px;
+            background: #e0e0e0;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎓 SmartrVideo Generator</h1>
+        <p class="subtitle">Transform your lecture content into educational videos</p>
+        {% if veo_available %}
+        <div class="veo-status available">🎬 Veo API: Enabled</div>
+        {% else %}
+        <div class="veo-status unavailable">⚠️ Veo API: Not configured (using local generation)</div>
+        {% endif %}
+        
+        <form id="videoForm">
+            <div class="form-group">
+                <label for="video_title">Video Title</label>
+                <input type="text" id="video_title" name="video_title" 
+                       value="DualArrayDeque: Building a Deque from Two Stacks" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="topic">Topic</label>
+                <input type="text" id="topic" name="topic" 
+                       value="Data Structures" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="audience_level">Audience Level</label>
+                <select id="audience_level" name="audience_level" required>
+                    <option value="high_school">High School</option>
+                    <option value="college" selected>College</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="summary_notes">Lecture Content / Summary Notes</label>
+                <textarea id="summary_notes" name="summary_notes" required>The DualArrayDeque is a data structure that achieves the same performance bounds as an ArrayDeque by using two ArrayStacks. A DualArrayDeque represents a list using two ArrayStacks called front and back, placed back-to-back so that operations are fast at either end. The front ArrayStack stores list elements with indices 0 through front.size()-1 in reverse order, while the back ArrayStack contains elements with indices from front.size() to size()-1 in normal order. The get(i) and set(i,x) operations translate into appropriate calls on either front or back, taking O(1) time. The add(i,x) operation manipulates either front or back as appropriate and calls balance() to ensure that front.size() and back.size() do not differ by more than a factor of 3.</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="transcript_excerpt">Transcript Excerpt (Optional)</label>
+                <textarea id="transcript_excerpt" name="transcript_excerpt"></textarea>
+            </div>
+            
+            <div class="button-group">
+                <button type="submit" class="btn-primary" id="generateBtn">
+                    Generate Video Storyboard
+                </button>
+                <button type="button" class="btn-secondary" onclick="clearForm()">
+                    Clear
+                </button>
+            </div>
+        </form>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Generating your video storyboard...</p>
+        </div>
+        
+        <div class="error" id="error"></div>
+        
+        <div class="results" id="results">
+            <div class="results-header">
+                <h2>Generated Storyboard</h2>
+                <p id="videoInfo"></p>
+            </div>
+            
+            <div id="scenesContainer"></div>
+            
+            <div class="video-preview">
+                <h3>Video Preview</h3>
+                <div id="videoContainer">
+                    <div class="video-placeholder" id="videoPlaceholder">
+                        <div>
+                            <p>📹 Video preview will appear here</p>
+                            <p style="font-size: 0.9em; margin-top: 10px;">Storyboard generated! Generating video...</p>
+                        </div>
+                    </div>
+                    <video id="videoPlayer" controls style="display: none; width: 100%; max-width: 800px; border-radius: 6px; margin: 0 auto;">
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const form = document.getElementById('videoForm');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const error = document.getElementById('error');
+        const generateBtn = document.getElementById('generateBtn');
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Hide previous results/errors
+            results.classList.remove('active');
+            error.classList.remove('active');
+            
+            // Show loading
+            loading.classList.add('active');
+            generateBtn.disabled = true;
+            
+            // Get form data
+            const formData = {
+                video_title: document.getElementById('video_title').value,
+                topic: document.getElementById('topic').value,
+                audience_level: document.getElementById('audience_level').value,
+                summary_notes: document.getElementById('summary_notes').value,
+                transcript_excerpt: document.getElementById('transcript_excerpt').value
+            };
+            
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Generation failed');
+                }
+                
+                // Display results
+                displayResults(data);
+                
+            } catch (err) {
+                error.textContent = 'Error: ' + err.message;
+                error.classList.add('active');
+            } finally {
+                loading.classList.remove('active');
+                generateBtn.disabled = false;
+            }
+        });
+        
+        function displayResults(data) {
+            const storyboard = data.storyboard;
+            
+            // Update video info
+            document.getElementById('videoInfo').textContent = 
+                `Total Duration: ${storyboard.total_duration_seconds}s | ` +
+                `Scenes: ${storyboard.scenes.length} | ` +
+                `Topic: ${storyboard.topic}`;
+            
+            // Display scenes
+            const scenesContainer = document.getElementById('scenesContainer');
+            scenesContainer.innerHTML = '';
+            
+            storyboard.scenes.forEach(scene => {
+                const sceneCard = document.createElement('div');
+                sceneCard.className = 'scene-card';
+                sceneCard.innerHTML = `
+                    <div class="scene-header">
+                        <span class="scene-id">Scene ${scene.scene_id}</span>
+                        <span class="scene-duration">${scene.duration_seconds}s</span>
+                    </div>
+                    <div class="scene-narration">${scene.narration_text}</div>
+                    <div style="margin-top: 8px; font-size: 0.9em; color: #666;">
+                        Visual: ${scene.visual_type} | Camera: ${scene.veo_motion_hint.camera}
+                    </div>
+                `;
+                scenesContainer.appendChild(sceneCard);
+            });
+            
+            // Display video if available
+            if (data.video_url) {
+                const videoPlayer = document.getElementById('videoPlayer');
+                const videoPlaceholder = document.getElementById('videoPlaceholder');
+                videoPlayer.src = data.video_url;
+                videoPlayer.style.display = 'block';
+                videoPlaceholder.style.display = 'none';
+            } else {
+                const videoPlaceholder = document.getElementById('videoPlaceholder');
+                videoPlaceholder.innerHTML = `
+                    <div>
+                        <p>📹 Video generation not available</p>
+                        <p style="font-size: 0.9em; margin-top: 10px;">Install moviepy: pip install moviepy</p>
+                        <p style="font-size: 0.9em;">Storyboard generated successfully!</p>
+                    </div>
+                `;
+            }
+            
+            results.classList.add('active');
+        }
+        
+        function clearForm() {
+            form.reset();
+            results.classList.remove('active');
+            error.classList.remove('active');
+        }
+    </script>
+</body>
+</html>

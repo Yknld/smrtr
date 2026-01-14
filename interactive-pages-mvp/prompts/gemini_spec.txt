@@ -1,0 +1,66 @@
+You are Gemini 3. Convert the lesson content into a STRICT JSON specification for an interactive HTML learning page.
+
+You MUST output ONLY valid JSON. No markdown. No commentary.
+
+Lesson Title: {{TITLE}}
+Lesson Summary: {{SUMMARY}}
+Lesson Transcript (optional): {{TRANSCRIPT}}
+User Feedback (optional): {{FEEDBACK}}
+
+Requirements:
+- 2 to 4 scenes max.
+- Each scene must have:
+  - a title
+  - 2-4 bullet teaching points
+  - one interactive element idea (choose from: slider, drag-drop, click-to-reveal, matching, sorting, mini-sim, choose-your-path)
+- Include exactly 1 "mini-game" interaction that reinforces a core concept.
+- Include exactly 1 "quiz checkpoint" with 4 multiple choice questions:
+  - each question: prompt, 4 options, correct_index, short explanation
+- Include a progress model:
+  - total_steps = number of scenes + quiz + ending
+- Tone: clear, engaging, NOT childish, no emojis.
+- Must be doable in pure HTML/CSS/JS without external libraries.
+
+Output JSON schema:
+{
+  "meta": {
+    "title": "...",
+    "topic": "...",
+    "learning_objectives": ["...", "...", "..."]
+  },
+  "scenes": [
+    {
+      "id": "scene1",
+      "title": "...",
+      "teaching_points": ["...", "..."],
+      "interaction": {
+        "type": "slider|dragdrop|reveal|matching|sorting|minisim|choosepath",
+        "goal": "...",
+        "content": { }
+      }
+    }
+  ],
+  "minigame": {
+    "type": "matching|sorting|minisim|choosepath",
+    "goal": "...",
+    "instructions": "...",
+    "data": { }
+  },
+  "quiz": {
+    "title": "Checkpoint Quiz",
+    "questions": [
+      {
+        "prompt": "...",
+        "options": ["A","B","C","D"],
+        "correct_index": 0,
+        "explanation": "..."
+      }
+    ]
+  },
+  "ending": {
+    "recap_points": ["...", "...", "..."],
+    "next_steps": ["..."]
+  }
+}
+
+Ensure the JSON is compact and complete.

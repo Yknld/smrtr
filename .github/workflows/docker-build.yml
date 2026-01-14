@@ -1,0 +1,79 @@
+name: Build TTS Docker Images
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'services/chatterbox_tts/**'
+      - 'services/chatterbox_tts_multilingual/**'
+      - '.github/workflows/docker-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build-turbo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set lowercase owner
+        id: owner
+        run: echo "lowercase=${OWNER,,}" >> $GITHUB_OUTPUT
+        env:
+          OWNER: ${{ github.repository_owner }}
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push Turbo image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/chatterbox_tts/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-turbo:latest
+            ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-turbo:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-turbo:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-turbo:buildcache,mode=max
+  
+  build-multilingual:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set lowercase owner
+        id: owner
+        run: echo "lowercase=${OWNER,,}" >> $GITHUB_OUTPUT
+        env:
+          OWNER: ${{ github.repository_owner }}
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push Multilingual image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/chatterbox_tts_multilingual/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-multilingual:latest
+            ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-multilingual:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-multilingual:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ steps.owner.outputs.lowercase }}/chatterbox-tts-multilingual:buildcache,mode=max

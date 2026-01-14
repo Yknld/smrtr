@@ -1,0 +1,7 @@
+{
+  "input": {
+    "text": "Welcome to the podcast. Today we're going to discuss some fascinating topics.",
+    "language": "en",
+    "voice": "/app/runpod/host_voice.flac"
+  }
+}

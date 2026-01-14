@@ -1,0 +1,16 @@
+.page-transition {
+  width: 100%;
+  height: 100%;
+  animation: fadeInSlide var(--motion-duration-normal) var(--motion-easing-ease-out);
+}
+
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--motion-distance-slide) * 0.5));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

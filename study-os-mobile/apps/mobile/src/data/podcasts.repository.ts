@@ -586,25 +586,14 @@ export async function fetchPodcastSegments(episodeId: string): Promise<PodcastSe
 
 /**
  * Get cached podcast data for a lesson
+ * DISABLED: Always return null to force fresh backend checks
  */
 export function getCachedPodcast(lessonId: string): {
   episode: PodcastEpisode | null;
   segments: PodcastSegment[];
 } | null {
-  const cached = podcastCache.get(lessonId);
-  if (!cached) return null;
-  
-  // Check if cache is still valid
-  const now = Date.now();
-  if (now - cached.timestamp > CACHE_TTL) {
-    podcastCache.delete(lessonId);
-    return null;
-  }
-  
-  return {
-    episode: cached.episode,
-    segments: cached.segments,
-  };
+  // Cache disabled - always fetch fresh from backend
+  return null;
 }
 
 /**
@@ -614,14 +603,7 @@ export function getCachedPodcast(lessonId: string): {
  */
 export async function preloadPodcast(lessonId: string): Promise<void> {
   try {
-    console.log(`📥 Pre-loading podcast for lesson ${lessonId}...`);
-    
-    // Check if already in cache
-    const cached = getCachedPodcast(lessonId);
-    if (cached) {
-      console.log('✅ Podcast already in cache');
-      return;
-    }
+    console.log(`📥 Fetching fresh podcast data for lesson ${lessonId}...`);
     
     // Fetch episode
     const episode = await fetchPodcastEpisode(lessonId);
@@ -632,18 +614,57 @@ export async function preloadPodcast(lessonId: string): Promise<void> {
       segments = await fetchPodcastSegments(episode.id);
     }
     
-    // Cache the data
-    podcastCache.set(lessonId, {
-      episode,
-      segments,
-      timestamp: Date.now(),
-    });
+    // Cache disabled - no longer storing in cache
     
     console.log(`✅ Pre-loaded podcast: status=${episode?.status}, segments=${segments.length}`);
   } catch (error) {
     console.error('Failed to pre-load podcast:', error);
     // Don't throw - pre-loading is best-effort
   }
+}
+
+/**
+ * Generate immediate acknowledgment for join-in (uses turbo TTS - 1-2 seconds)
+ */
+export async function acknowledgeJoinIn(
+  episodeId: string,
+  currentSegmentIndex: number,
+  userInput: string
+): Promise<PodcastSegment> {
+  console.log('🎙️ Requesting acknowledgment...');
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    throw new Error('User not authenticated');
+  }
+
+  const response = await fetch(
+    `${supabase.supabaseUrl}/functions/v1/podcast_join_in_acknowledge`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        episode_id: episodeId,
+        current_segment_index: currentSegmentIndex,
+        user_input: userInput,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('📥 Acknowledgment response status:', response.status);
+    console.error('📥 Acknowledgment response text:', errorText);
+    throw new Error(`Failed to generate acknowledgment: ${response.status}`);
+  }
+
+  const result = await response.json();
+  console.log(`✅ Acknowledgment ready`);
+
+  return result.acknowledgment_segment;
 }
 
 /**

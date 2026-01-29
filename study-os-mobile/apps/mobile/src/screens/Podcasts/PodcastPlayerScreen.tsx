@@ -26,6 +26,7 @@ import {
   generatePodcastAudio,
   getCachedPodcast,
   clearPodcastCache,
+  acknowledgeJoinIn,
   joinInPodcast,
   PodcastEpisode,
   PodcastSegment,
@@ -396,38 +397,55 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
         await stopListening();
       }
 
+      const userQuestion = joinInInput.trim();
       setIsJoinInLoading(true);
-      console.log('🎤 Submitting join-in question...');
-      console.log('   Episode ID:', episode.id);
-      console.log('   Lesson ID:', lessonId);
-      console.log('   Episode lesson_id:', episode.lessonId);
-      console.log('   Current segment:', currentSegmentIndex);
-      console.log('   Question:', joinInInput.trim());
-
-      // Call join-in API - use episode.lessonId if available, fallback to lessonId
-      const actualLessonId = episode.lessonId || lessonId;
-      console.log('   Using lesson ID:', actualLessonId);
-      
-      const newSegments = await joinInPodcast(
-        episode.id,
-        currentSegmentIndex,
-        joinInInput.trim(),
-        actualLessonId
-      );
-
-      setJoinInSegments(newSegments);
-      setIsPlayingJoinIn(true);
       setShowJoinInModal(false);
       setJoinInInput('');
+      
+      console.log('🎤 Submitting join-in question:', userQuestion);
 
-      console.log(`✅ Join-in segments created: ${newSegments.length}`);
+      // Show loading indicator
+      setIsPlayingJoinIn(true);
 
-      // Poll for TTS completion and play
-      pollJoinInAudio(newSegments);
+      // STEP 1: Get immediate acknowledgment (turbo TTS - 1-2 seconds)
+      console.log('🎙️ Getting acknowledgment (turbo)...');
+      const ackSegment = await acknowledgeJoinIn(
+        episode.id,
+        currentSegmentIndex,
+        userQuestion
+      );
+
+      console.log('✅ Acknowledgment ready:', ackSegment);
+      
+      // Play acknowledgment immediately
+      setJoinInSegments([ackSegment]);
+      pollJoinInAudio([ackSegment]);
+
+      // STEP 2: Generate full response in background
+      const actualLessonId = episode.lessonId || lessonId;
+      console.log('🔄 Generating full response in background...');
+      
+      // Don't await - let it run in background
+      joinInPodcast(
+        episode.id,
+        currentSegmentIndex,
+        userQuestion,
+        actualLessonId
+      ).then((responseSegments) => {
+        console.log(`✅ Full response ready: ${responseSegments.length} segments`);
+        // Add response segments to existing acknowledgment
+        setJoinInSegments(prev => [...prev, ...responseSegments]);
+        // Poll for their TTS completion
+        pollJoinInAudio(responseSegments);
+      }).catch((error) => {
+        console.error('Failed to generate full response:', error);
+        // Acknowledgment already played, so don't fail the whole thing
+      });
 
     } catch (error: any) {
       console.error('Failed to join in:', error);
       alert(`Failed to join conversation: ${error.message}`);
+      setIsPlayingJoinIn(false);
     } finally {
       setIsJoinInLoading(false);
     }
@@ -505,20 +523,38 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
   };
 
   const playJoinInSegments = async (joinSegments: PodcastSegment[]) => {
-    // TODO: Implement sequential playback of join-in segments
-    // For now, just log
-    console.log(`🎵 Playing ${joinSegments.length} join-in segments`);
+    console.log(`✅ ${joinSegments.length} join-in segments ready`);
+    console.log('💡 Join-in response added to the episode');
     
-    // After playing, resume original podcast
-    setTimeout(() => {
-      setIsPlayingJoinIn(false);
-      console.log('✅ Join-in complete, resuming podcast');
-      // Resume playback
-      if (sound) {
-        sound.playAsync();
-        setIsPlaying(true);
+    try {
+      // Reload segments to include the new join-in segments
+      if (episode) {
+        console.log('🔄 Reloading episode segments...');
+        const updatedSegments = await fetchPodcastSegments(episode.id);
+        setSegments(updatedSegments);
+        
+        // Generate audio URLs for new segments
+        const urls = await Promise.all(
+          updatedSegments.map(async (seg) => {
+            if (!seg.audioBucket || !seg.audioPath) return '';
+            const { data } = await supabase.storage
+              .from(seg.audioBucket)
+              .createSignedUrl(seg.audioPath, 3600);
+            return data?.signedUrl || '';
+          })
+        );
+        setAudioUrls(urls.filter(url => url !== ''));
+        console.log(`✅ Reloaded ${updatedSegments.length} segments`);
       }
-    }, 5000); // Placeholder - should be actual audio duration
+      
+      // Close the modal
+      setIsPlayingJoinIn(false);
+      
+      console.log('🎙️ Your question has been answered!');
+    } catch (error) {
+      console.error('Error reloading episode:', error);
+      setIsPlayingJoinIn(false);
+    }
   };
 
   const handleDownload = () => {
@@ -636,47 +672,9 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
         setIsLoading(true);
         setLoadError(null);
 
-        // Clear cache first to ensure fresh data
-        clearPodcastCache(lessonId);
-        console.log('🔄 Cache cleared, fetching fresh podcast data...');
+        console.log('🔄 Fetching fresh podcast data from backend...');
 
-        // Check cache first for instant loading (will be empty after clear above)
-        const cachedData = getCachedPodcast(lessonId);
-        if (cachedData && cachedData.episode) {
-          console.log('⚡ Using cached podcast data');
-          setEpisode(cachedData.episode);
-          
-          if (cachedData.segments.length > 0) {
-            setSegments(cachedData.segments);
-            
-            // Calculate durations
-            const totalDuration = cachedData.segments.reduce(
-              (sum, seg) => sum + (seg.durationMs || 0),
-              0
-            ) / 1000;
-            setDuration(Math.floor(totalDuration));
-            
-            const durations = cachedData.segments.map(seg => (seg.durationMs || 0) / 1000);
-            setSegmentDurations(durations);
-            
-            // Generate audio URLs
-            const urls = cachedData.segments.map(seg => {
-              if (seg.audioPath) {
-                const { data } = supabase.storage
-                  .from('tts_audio')
-                  .getPublicUrl(seg.audioPath);
-                return data.publicUrl;
-              }
-              return '';
-            }).filter(url => url !== '');
-            setAudioUrls(urls);
-            
-            setIsLoading(false);
-            return; // Done - using cached data!
-          }
-        }
-
-        // No cache or incomplete cache - fetch from server
+        // Always fetch fresh from backend (cache disabled)
         const existingEpisode = await fetchPodcastEpisode(lessonId);
 
         if (existingEpisode) {
@@ -768,8 +766,57 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
                 }
               }
             }, 3000);
+          } else if (existingEpisode.status === 'queued') {
+            // Episode is queued but script generation wasn't triggered - trigger it now
+            console.log('Episode is queued - triggering script generation...');
+            try {
+              await generatePodcastScript(existingEpisode.id);
+              const updated = await fetchPodcastEpisode(lessonId);
+              if (updated) {
+                setEpisode(updated);
+              }
+              
+              // Trigger audio generation
+              generatePodcastAudio(existingEpisode.id).catch(err => {
+                console.error('Audio generation failed:', err);
+              });
+            } catch (error: any) {
+              console.error('Script generation failed:', error);
+              setLoadError(error.message || 'Failed to generate podcast');
+              setIsLoading(false);
+              return;
+            }
+            
+            // Start polling for completion
+            pollInterval = setInterval(async () => {
+              const updated = await fetchPodcastEpisode(lessonId);
+              if (updated) {
+                setEpisode(updated);
+                
+                if (updated.status === 'ready') {
+                  const episodeSegments = await fetchPodcastSegments(updated.id);
+                  setSegments(episodeSegments);
+
+                  const totalDuration = episodeSegments.reduce(
+                    (sum, seg) => sum + (seg.durationMs || 0),
+                    0
+                  ) / 1000;
+                  setDuration(Math.floor(totalDuration));
+
+                  const durations = episodeSegments.map(seg => (seg.durationMs || 0) / 1000);
+                  setSegmentDurations(durations);
+
+                  setIsLoading(false);
+                  if (pollInterval) clearInterval(pollInterval);
+                } else if (updated.status === 'failed') {
+                  setLoadError(updated.error || 'Podcast generation failed');
+                  setIsLoading(false);
+                  if (pollInterval) clearInterval(pollInterval);
+                }
+              }
+            }, 3000);
           } else {
-            // Other statuses (queued, scripting) - just poll
+            // Other statuses (scripting) - just poll
             pollInterval = setInterval(async () => {
               const updated = await fetchPodcastEpisode(lessonId);
               if (updated) {

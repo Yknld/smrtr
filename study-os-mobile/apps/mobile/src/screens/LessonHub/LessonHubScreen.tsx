@@ -20,6 +20,7 @@ import { updateLessonTitle } from '../../data/lessons.repository';
 import { supabase } from '../../config/supabase';
 import { generateYouTubeRecommendations, fetchYouTubeResources } from '../../data/youtube.repository';
 import { upsertStudyPlan, buildRRule } from '../../data/schedule.repository';
+import { preloadPodcast } from '../../data/podcasts.repository';
 
 interface LessonHubScreenProps {
   route: {
@@ -38,6 +39,7 @@ interface LessonData {
     flashcards: boolean;
     quiz: boolean;
     podcast: boolean;
+    video: boolean;
   };
   processing: Set<string>;
 }
@@ -61,6 +63,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
       flashcards: false,
       quiz: false,
       podcast: false,
+      video: false,
     },
     processing: new Set(),
   });
@@ -116,6 +119,53 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
     return unsubscribe;
   }, [lessonId, navigation]);
 
+  // Subscribe to real-time updates for lesson outputs and assets
+  useEffect(() => {
+    console.log('[LessonHub] Setting up real-time subscriptions');
+
+    // Subscribe to lesson_outputs changes
+    const outputsChannel = supabase
+      .channel(`lesson_outputs_${lessonId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lesson_outputs',
+          filter: `lesson_id=eq.${lessonId}`,
+        },
+        (payload) => {
+          console.log('[LessonHub] Lesson output changed:', payload);
+          loadLessonData(); // Reload data when outputs change
+        }
+      )
+      .subscribe();
+
+    // Subscribe to lesson_assets changes
+    const assetsChannel = supabase
+      .channel(`lesson_assets_${lessonId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lesson_assets',
+          filter: `lesson_id=eq.${lessonId}`,
+        },
+        (payload) => {
+          console.log('[LessonHub] Lesson asset changed:', payload);
+          loadLessonData(); // Reload data when assets change
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('[LessonHub] Cleaning up real-time subscriptions');
+      outputsChannel.unsubscribe();
+      assetsChannel.unsubscribe();
+    };
+  }, [lessonId]);
+
   const loadLessonData = async () => {
     try {
       // Fetch notes from lesson_outputs
@@ -139,7 +189,52 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
         console.error('[LessonHub] Error loading notes:', notesError);
       }
 
-      // TODO: Also load outputs status (flashcards, quiz, podcast)
+      // Fetch all lesson outputs
+      const { data: outputs, error: outputsError } = await supabase
+        .from('lesson_outputs')
+        .select('type, status')
+        .eq('lesson_id', lessonId);
+
+      // Fetch all lesson assets
+      const { data: assets, error: assetsError } = await supabase
+        .from('lesson_assets')
+        .select('kind')
+        .eq('lesson_id', lessonId);
+
+      if (!outputsError && outputs) {
+        const outputsMap = outputs.reduce((acc: any, output: any) => {
+          acc[output.type] = output.status;
+          return acc;
+        }, {});
+
+        const processing = new Set<string>();
+        
+        // Check for processing states
+        if (outputsMap.flashcards === 'processing') processing.add('flashcards');
+        if (outputsMap.quiz === 'processing') processing.add('quiz');
+        
+        // Check assets for podcast and video
+        const hasPodcast = assets?.some((a: any) => a.kind === 'audio') || false;
+        const hasVideo = assets?.some((a: any) => a.kind === 'video') || false;
+
+        setLessonData(prev => ({
+          ...prev,
+          outputs: {
+            flashcards: outputsMap.flashcards === 'ready',
+            quiz: outputsMap.quiz === 'ready',
+            podcast: hasPodcast,
+            video: hasVideo,
+          },
+          processing,
+        }));
+
+        console.log('[LessonHub] Loaded outputs:', {
+          flashcards: outputsMap.flashcards,
+          quiz: outputsMap.quiz,
+          podcast: hasPodcast,
+          video: hasVideo,
+        });
+      }
       
     } catch (err: any) {
       console.error('[LessonHub] Failed to load lesson data:', err);
@@ -268,9 +363,8 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
     });
   };
 
-  const handlePodcast = async () => {
+  const handlePodcast = () => {
     // Pre-load podcast data in background before navigation
-    const { preloadPodcast } = await import('../../data/podcasts.repository');
     preloadPodcast(lessonId); // Fire and forget - loads in background
     
     // Navigate immediately (screen will use cached data if available)
@@ -289,11 +383,126 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
     });
   };
 
+  const handlePlayVideo = async () => {
+    try {
+      console.log('[LessonHub] Fetching latest video for lesson:', lessonId);
+      
+      // Fetch the most recent video for this lesson
+      const { data: videos, error: videoError } = await supabase
+        .from('lesson_assets')
+        .select('*')
+        .eq('lesson_id', lessonId)
+        .eq('kind', 'video')
+        .not('storage_path', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (videoError) throw videoError;
+      
+      if (!videos || videos.length === 0) {
+        console.log('[LessonHub] No videos found');
+        alert('No video available yet');
+        return;
+      }
+
+      const video = videos[0];
+      console.log('[LessonHub] Playing video:', video.storage_path);
+
+      // Get signed URL for the video
+      const { data: urlData, error: urlError } = await supabase.storage
+        .from('lesson-assets')
+        .createSignedUrl(video.storage_path, 3600); // 1 hour expiry
+
+      if (urlError) throw urlError;
+      if (!urlData?.signedUrl) throw new Error('Failed to get video URL');
+
+      console.log('[LessonHub] Navigating to video player');
+      
+      // Navigate to in-app video player
+      navigation.navigate('VideoPlayer', {
+        videoUrl: urlData.signedUrl,
+        lessonTitle: lessonTitle,
+      });
+      
+    } catch (error: any) {
+      console.error('[LessonHub] Error playing video:', error);
+      alert(error.message || 'Failed to play video');
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    try {
+      // Set generating state immediately
+      setLessonData(prev => ({
+        ...prev,
+        processing: new Set(prev.processing).add('video'),
+      }));
+
+      // Get session token
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+
+      // Call video generation edge function
+      const response = await fetch(
+        `https://euxfugfzmpsemkjpcpuz.supabase.co/functions/v1/lesson_generate_video`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            lesson_id: lessonId,
+            aspect_ratios: ['16:9'],
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || error.error || 'Failed to generate video');
+      }
+
+      const result = await response.json();
+      console.log('[LessonHub] Video generation started:', result.video_id);
+      
+      // Don't remove from processing - let Realtime subscription handle it
+      // when the video is actually ready
+      
+    } catch (error: any) {
+      console.error('Error generating video:', error);
+      alert(error.message || 'Failed to generate video. Please try again.');
+      
+      // Remove from processing on error
+      setLessonData(prev => {
+        const newProcessing = new Set(prev.processing);
+        newProcessing.delete('video');
+        return {
+          ...prev,
+          processing: newProcessing,
+        };
+      });
+    }
+  };
+
   const handleOpenNotes = () => {
     navigation.navigate('NotesView', {
       lessonId,
       lessonTitle: currentTitle,
     });
+  };
+
+  // Helper to get badge state for generatable content
+  const getBadgeState = (contentType: 'flashcards' | 'quiz' | 'podcast' | 'video'): 'Generate' | 'Generating' | 'Generated' | undefined => {
+    if (lessonData.processing.has(contentType)) {
+      return 'Generating';
+    }
+    if (lessonData.outputs[contentType]) {
+      return 'Generated';
+    }
+    return 'Generate';
   };
 
   const handleCreateSchedule = async (schedule: {
@@ -427,7 +636,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
               <ActionTile
                 icon="layers-outline"
                 label="Flashcards"
-                badge={!lessonData.outputs.flashcards ? 'Generate' : 'Open'}
+                badge={getBadgeState('flashcards')}
                 disabled={lessonData.processing.has('flashcards')}
                 onPress={handleFlashcards}
               />
@@ -438,7 +647,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
               <ActionTile
                 icon="help-circle-outline"
                 label="Quiz"
-                badge={!lessonData.outputs.quiz ? 'Generate' : 'Open'}
+                badge={getBadgeState('quiz')}
                 disabled={lessonData.processing.has('quiz')}
                 onPress={handleQuiz}
               />
@@ -449,13 +658,33 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
               <ActionTile
                 icon="mic-outline"
                 label="Podcast"
-                badge={!lessonData.outputs.podcast ? 'Generate' : 'Open'}
+                badge={getBadgeState('podcast')}
                 disabled={lessonData.processing.has('podcast')}
                 onPress={handlePodcast}
               />
             </View>
             
-            {/* 6. Assets */}
+            {/* 6. Video */}
+            <View style={styles.gridItem}>
+              <ActionTile
+                icon="videocam-outline"
+                label="Video"
+                subtitle="30s explainer"
+                badge={getBadgeState('video')}
+                disabled={lessonData.processing.has('video')}
+                onPress={() => {
+                  // If video exists, play it directly
+                  if (lessonData.outputs.video) {
+                    handlePlayVideo();
+                  } else {
+                    // Otherwise generate new video
+                    handleGenerateVideo();
+                  }
+                }}
+              />
+            </View>
+            
+            {/* 7. Assets */}
             <View style={styles.gridItem}>
               <ActionTile
                 icon="folder-outline"

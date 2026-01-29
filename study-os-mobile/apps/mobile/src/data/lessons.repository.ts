@@ -58,6 +58,7 @@ export async function fetchLessons(courseId: string): Promise<LessonWithOutputs[
       hasFlashcards: outputs.some((o: any) => o.type === 'flashcards'),
       hasQuiz: outputs.some((o: any) => o.type === 'quiz'),
       hasPodcast: assets.some((a: any) => a.kind === 'audio'),
+      hasVideo: assets.some((a: any) => a.kind === 'video'),
     };
   });
 }
@@ -117,6 +118,7 @@ export async function fetchLessonById(lessonId: string): Promise<LessonWithOutpu
     hasFlashcards: outputs.some((o: any) => o.type === 'flashcards'),
     hasQuiz: outputs.some((o: any) => o.type === 'quiz'),
     hasPodcast: assets.some((a: any) => a.kind === 'audio'),
+    hasVideo: assets.some((a: any) => a.kind === 'video'),
   };
 }
 

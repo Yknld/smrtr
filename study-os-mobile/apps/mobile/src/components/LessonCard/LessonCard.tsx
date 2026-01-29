@@ -29,7 +29,7 @@ export const LessonCard: React.FC<LessonCardProps> = ({ lesson, onPress, onLongP
   };
   
   const statusColor = LessonStatusColors[lesson.status];
-  const hasOutputs = lesson.hasSummary || lesson.hasFlashcards || lesson.hasQuiz;
+  const hasOutputs = lesson.hasSummary || lesson.hasFlashcards || lesson.hasQuiz || lesson.hasVideo;
   
   return (
     <TouchableOpacity
@@ -64,6 +64,9 @@ export const LessonCard: React.FC<LessonCardProps> = ({ lesson, onPress, onLongP
             )}
             {lesson.hasQuiz && (
               <Ionicons name="help-circle-outline" size={16} color={colors.textTertiary} style={styles.outputIcon} />
+            )}
+            {lesson.hasVideo && (
+              <Ionicons name="videocam-outline" size={16} color={colors.textTertiary} style={styles.outputIcon} />
             )}
           </View>
         )}

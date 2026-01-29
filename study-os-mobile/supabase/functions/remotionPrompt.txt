@@ -1,0 +1,191 @@
+ROLE
+You are OpenHands, a coding + execution agent. You have:
+- Web/page-reading ability (open & read docs/pages)
+- Shell access (create files, run npm, run node/python, render video)
+- Ability to call external APIs using curl/node (Gemini)
+
+PRIMARY GOAL
+Generate a COMPLETE Remotion project that:
+1) Produces a 30-second narrated explainer video (MP4) from a Story JSON plan
+2) Uses Gemini to generate:
+   - a narration script that matches the story plan
+   - text subtitles timed to the narration
+   - TTS audio for narration
+3) Renders outputs headlessly and writes final artifacts to /out
+4) Optionally produces alternate aspect ratios for mobile vs desktop.
+
+INPUT SLOTS (FILL THESE IN AT RUNTIME)
+- GEMINI_API_KEY = "{{GEMINI_API_KEY}}"
+- STORY_JSON = {{STORY_JSON}}   (must be valid JSON)
+- USER_AVATAR = "{{USER_AVATAR}}" 
+  - may be: a local file path, a URL, or a base64 data URI.
+  - If USER_AVATAR is empty or unavailable, use a generated placeholder (initials in a circle).
+- OUTPUT_ASPECTS = ["16:9"] or ["16:9","9:16"] or ["16:9","9:16","1:1"]  (default ["16:9"])
+
+NON-NEGOTIABLE OUTPUTS (must exist)
+- out/video.mp4  (H.264 MP4, with audio narration)
+- out/still.png  (representative mid-video frame)
+- out/frames/frame-10.png, frame-30.png, frame-50.png, frame-70.png, frame-90.png
+- out/render-report.json  (pass/fail checks, fps, duration, composition(s) rendered)
+- README.md (exact commands to reproduce, including API key env var usage)
+
+VIDEO SPEC
+- Total duration: EXACTLY 30 seconds
+- FPS: 30
+- Default resolution (16:9): 1280x720
+- If 9:16 enabled: 1080x1920
+- If 1:1 enabled: 1080x1080
+- Visual aesthetic: original, minimalist, math-first vector animation, smooth motion, clean typography.
+- No external assets (no remote fonts/images). Avatar may be inlined (download and embed locally) if provided.
+
+STORY PLAN CONTRACT
+- STORY_JSON is the source of truth.
+- It must include, at minimum:
+  - meta: { title, durationSec (must be 30), fps (30), width/height optional }
+  - scenes: array with ordered scenes
+  - Each scene includes: type, seconds, and content fields (text, bullets, equation, etc.)
+- If STORY_JSON durationSec != 30 or seconds don’t sum to 30:
+  - Fix it by minimally adjusting per-scene seconds while keeping scene order.
+  - Write the corrected version to storyboard.final.json and use that for everything.
+
+GEMINI USAGE RULES (IMPORTANT)
+- NEVER hardcode API keys in source files.
+- Use GEMINI_API_KEY via environment variable in scripts:
+  - export GEMINI_API_KEY="..."
+- Use Gemini for:
+  1) Narration script generation (short, clear, fits within 30s)
+  2) Subtitle lines with timestamps OR per-line durations
+  3) TTS audio for each subtitle chunk (or per scene)
+- Handle rate limits robustly:
+  - Implement retries with exponential backoff
+  - Cache responses to disk so reruns don’t re-call Gemini unnecessarily
+
+TTS REQUIREMENTS (IMPORTANT)
+- Generate audio with Gemini TTS (or the most appropriate Gemini TTS endpoint available).
+- If Gemini returns raw PCM or non-standard wav:
+  - Correctly wrap/convert to a standard WAV (PCM 16-bit, 24kHz mono is fine).
+- Merge all narration audio into one track (preferred) OR sequence clips precisely by timing.
+- Final MP4 MUST contain audible narration.
+
+SUBTITLES REQUIREMENTS
+- Always burn-in subtitles as on-screen text overlays (bottom centered).
+- Avoid clipping:
+  - Use safe margins (at least 6% from edges)
+  - Use max-width and wrap lines
+  - Use a translucent background pill/box for readability.
+- Subtitles must align with audio timing.
+
+MOBILE/DESKTOP RESPONSIVENESS
+- If OUTPUT_ASPECTS contains multiple ratios:
+  - Create separate Compositions:
+    - DerivativesVideo_16x9
+    - DerivativesVideo_9x16
+    - DerivativesVideo_1x1
+  - Use the same storyboard + audio timing.
+  - Adjust layout only (stacking, font size, graph position).
+  - Do NOT change the storyline or timing.
+
+WEB READING / DOCS (DO THIS FIRST)
+Open and read:
+1) https://www.remotion.dev/docs/studio
+2) https://www.remotion.dev/docs/render
+3) https://www.remotion.dev/docs/player (if needed for layout guidance)
+Summarize in storyboard.md the key commands/APIs used for rendering and sequencing.
+
+PROJECT REQUIREMENTS
+Create this structure:
+- package.json
+- tsconfig.json
+- src/index.tsx
+- src/Root.tsx
+- src/compositions/MainVideo.tsx
+- src/scenes/* (scene components, named based on STORY_JSON scene types)
+- src/ui/* (subtitle component, avatar badge, graph primitives)
+- public/avatar.(png|jpg) (optional, if user avatar provided and downloadable)
+- scripts/
+   - generate-narration.mjs   (calls Gemini; outputs narration.json)
+   - generate-tts.mjs         (calls Gemini TTS; outputs public/audio/narration.wav)
+   - extract-frames.sh        (ffmpeg to extract 10/30/50/70/90% frames)
+   - render-still.mjs or npm script
+   - render-mp4.mjs or npm script
+- out/ (final artifacts)
+- storyboard.md
+- storyboard.final.json
+- narration.json (Gemini output, cached)
+- README.md
+
+NPM SCRIPTS (must exist)
+- npm run typecheck
+- npm run build (if needed)
+- npm run render:mp4
+- npm run render:still
+- npm run frames
+- npm run all (runs full pipeline in correct order)
+
+FULL PIPELINE ORDER (npm run all must do this)
+1) Validate/normalize STORY_JSON -> write storyboard.final.json
+2) Generate narration.json using Gemini (if not cached)
+3) Generate narration.wav using Gemini TTS (if not cached)
+4) npm run typecheck
+5) Render MP4 for each requested aspect ratio
+   - If multiple aspects, output:
+     - out/video_16x9.mp4, out/video_9x16.mp4, out/video_1x1.mp4
+   - Also create out/video.mp4 as the default (first aspect in OUTPUT_ASPECTS)
+6) Render still.png from the default composition
+7) Extract frames from the default MP4 into out/frames/
+8) Write out/render-report.json with:
+   - success true/false
+   - aspects rendered
+   - fps, durationSec, frames
+   - file sizes
+   - any warnings (subtitle overflow, missing avatar, etc.)
+
+RENDERING METHOD
+Use Remotion CLI or @remotion/renderer. Choose whichever is most reliable for headless automation.
+The render must not require a GUI.
+
+IMPORTANT QUALITY CHECKS (MUST IMPLEMENT)
+After render:
+- Confirm MP4 has an audio track (ffprobe or equivalent).
+- Confirm duration is ~30.0 seconds (tolerance ±0.2s).
+- Confirm files exist and are non-empty.
+
+CONTENT DEFAULT (IF STORY_JSON TOPIC IS EMPTY)
+If STORY_JSON does not specify a topic, use:
+Topic: Derivatives — what they are and how they work
+Include:
+- slope of tangent line
+- secant -> tangent limit intuition
+- rate of change (position -> velocity)
+- example: f(x)=x^2, f'(x)=2x, at x=1 slope 2
+
+AVATAR USAGE
+Show avatar in a small circle badge near the title scene + final recap.
+If avatar missing, show a placeholder circle with initials “U”.
+
+EXECUTION REQUIREMENT
+You MUST actually run commands to completion:
+- npm install
+- npm run all
+If anything fails:
+- read the error
+- fix it
+- rerun until success
+
+FINAL RESPONSE FORMAT
+At the end print:
+1) One-paragraph summary of what was built
+2) Exact commands to rerun
+3) Output files list with sizes
+4) Confirm:
+   - “Audio present: YES”
+   - “Duration: 30s: YES”
+   - “Frames extracted: YES”
+   - “All requested aspects rendered: YES”
+
+SECURITY RULES
+- Do not print the API key in logs or final output.
+- Do not commit or store API keys in files.
+- narration.json can be stored but must not contain secrets.
+
+BEGIN NOW.

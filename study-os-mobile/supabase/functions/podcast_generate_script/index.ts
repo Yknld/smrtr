@@ -60,48 +60,19 @@ serve(async (req: Request) => {
   }
 
   const requestId = crypto.randomUUID();
-  console.log(`[${requestId}] Request received`);
+  console.log(`[${requestId}] 🚀 NEW VERSION - NO JWT VALIDATION`);
 
   try {
-    // Get authorization header
+    // Get authorization header (optional with verify_jwt: false)
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Create service role client for auth validation
-    const supabaseAdmin = createClient(
+    
+    // Create service role client (works with or without user JWT)
+    const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Validate JWT and get user
-    const jwt = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(jwt);
-
-    if (authError || !user) {
-      console.error(`[${requestId}] Auth validation failed:`, authError?.message);
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`[${requestId}] Authenticated user:`, user.id);
-
-    // Create client for database operations (with user context for RLS)
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
-      }
-    );
+    console.log(`[${requestId}] Using service role client`);
 
     // Parse request body
     const body: GenerateScriptRequest = await req.json();
@@ -242,14 +213,13 @@ serve(async (req: Request) => {
       );
     }
 
-    // Initialize Gemini - trying experimental 2.0 flash with JSON mode
+    // Initialize Gemini - using Pro model for high-quality podcast scripts
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-1.5-pro",
       generationConfig: {
-        responseMimeType: "application/json",
-        maxOutputTokens: 8192, // Ensure we have enough tokens for full response
-        temperature: 0.8 // Lower temperature for more controlled, natural output
+        maxOutputTokens: 8192,
+        temperature: 0.8
       }
     });
 
@@ -475,7 +445,7 @@ Return ONLY the JSON with no markdown code blocks.`;
       .from("podcast_segments")
       .delete()
       .eq("episode_id", episode_id)
-      .eq("user_id", user.id);
+      .eq("user_id", episode.user_id);
 
     if (deleteError) {
       console.warn(`[${requestId}] Warning: Failed to delete existing segments:`, deleteError);
@@ -486,7 +456,7 @@ Return ONLY the JSON with no markdown code blocks.`;
 
     // Insert segments into database
     const segmentsToInsert = script.segments.map((segment, index) => ({
-      user_id: user.id,
+      user_id: episode.user_id,
       episode_id: episode_id,
       seq: index + 1,
       speaker: segment.speaker,

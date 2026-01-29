@@ -1,0 +1,11 @@
+# Ignore all test files by default
+*.mp3
+*.wav
+*.flac
+*.webm
+*.m4a
+*.json
+*.txt
+
+# But keep the README
+!README.md

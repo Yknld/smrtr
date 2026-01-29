@@ -1,0 +1,81 @@
+-- ============================================================================
+-- Migration: Add Video Support to Storage Buckets
+-- ============================================================================
+-- 
+-- Purpose: Add video/mp4 and video/mpeg MIME types to lesson_assets bucket
+--          to support generated educational videos
+-- 
+-- NOTE: This migration is a placeholder. Storage bucket MIME types must be
+--       updated manually via the Supabase Dashboard or using the Supabase CLI.
+-- 
+-- ============================================================================
+
+-- MANUAL STEP REQUIRED:
+-- 
+-- Storage buckets cannot be updated via SQL migrations in all Supabase setups.
+-- You must manually add video MIME types to the lesson_assets bucket.
+--
+-- Option 1: Via Supabase Dashboard
+--   1. Go to Storage > Buckets
+--   2. Click on 'lesson_assets' bucket
+--   3. Go to Settings
+--   4. Add to Allowed MIME types:
+--      - video/mp4
+--      - video/mpeg
+--   5. Optionally increase file size limit to 100MB if needed
+--
+-- Option 2: Via Supabase CLI (if you have direct database access)
+--   Run this SQL as a superuser:
+--
+--   UPDATE storage.buckets
+--   SET allowed_mime_types = array_append(
+--     COALESCE(allowed_mime_types, ARRAY[]::text[]),
+--     'video/mp4'
+--   )
+--   WHERE id = 'lesson_assets'
+--     AND NOT ('video/mp4' = ANY(COALESCE(allowed_mime_types, ARRAY[]::text[])));
+--
+--   UPDATE storage.buckets
+--   SET allowed_mime_types = array_append(
+--     COALESCE(allowed_mime_types, ARRAY[]::text[]),
+--     'video/mpeg'
+--   )
+--   WHERE id = 'lesson_assets'
+--     AND NOT ('video/mpeg' = ANY(COALESCE(allowed_mime_types, ARRAY[]::text[])));
+--
+-- Option 3: If bucket doesn't exist yet, create it with video support:
+--   INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+--   VALUES (
+--     'lesson_assets',
+--     'lesson_assets',
+--     false,
+--     52428800, -- 50MB (or 104857600 for 100MB)
+--     ARRAY[
+--       'application/pdf',
+--       'audio/mpeg',
+--       'audio/mp3',
+--       'audio/wav',
+--       'audio/m4a',
+--       'audio/x-m4a',
+--       'image/jpeg',
+--       'image/png',
+--       'image/webp',
+--       'text/plain',
+--       'application/json',
+--       'video/mp4',
+--       'video/mpeg'
+--     ]
+--   )
+--   ON CONFLICT (id) DO UPDATE
+--   SET allowed_mime_types = (
+--     SELECT array_agg(DISTINCT unnest_val)
+--     FROM unnest(
+--       COALESCE((SELECT allowed_mime_types FROM storage.buckets WHERE id = 'lesson_assets'), ARRAY[]::text[]) ||
+--       ARRAY['video/mp4', 'video/mpeg']::text[]
+--     ) AS unnest_val
+--   );
+--
+-- ============================================================================
+
+-- This migration file exists to document the required manual step.
+-- No SQL is executed here to avoid permission errors.

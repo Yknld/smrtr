@@ -7,7 +7,7 @@ interface ActionTileProps {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   subtitle?: string;
-  badge?: 'Generate' | 'Open';
+  badge?: 'Generate' | 'Generating' | 'Generated' | 'Open';
   disabled?: boolean;
   onPress: () => void;
 }
@@ -20,6 +20,25 @@ export const ActionTile: React.FC<ActionTileProps> = ({
   disabled,
   onPress,
 }) => {
+  // Determine badge style based on state
+  const getBadgeStyle = () => {
+    if (badge === 'Generated') {
+      return [styles.badge, styles.badgeGenerated];
+    } else if (badge === 'Generating') {
+      return [styles.badge, styles.badgeGenerating];
+    }
+    return styles.badge;
+  };
+
+  const getBadgeTextStyle = () => {
+    if (badge === 'Generated') {
+      return [styles.badgeText, styles.badgeTextGenerated];
+    } else if (badge === 'Generating') {
+      return [styles.badgeText, styles.badgeTextGenerating];
+    }
+    return styles.badgeText;
+  };
+
   return (
     <TouchableOpacity
       style={[styles.tile, disabled && styles.tileDisabled]}
@@ -28,8 +47,8 @@ export const ActionTile: React.FC<ActionTileProps> = ({
       activeOpacity={0.7}
     >
       {badge && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badge}</Text>
+        <View style={getBadgeStyle()}>
+          <Text style={getBadgeTextStyle()}>{badge}</Text>
         </View>
       )}
       <View style={styles.content}>
@@ -77,12 +96,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
+  badgeGenerating: {
+    backgroundColor: 'rgba(96, 165, 250, 0.2)', // Blue with transparency
+    borderWidth: 1,
+    borderColor: '#60A5FA',
+  },
+  badgeGenerated: {
+    backgroundColor: 'rgba(74, 222, 128, 0.2)', // Green with transparency
+    borderWidth: 1,
+    borderColor: '#4ADE80',
+  },
   badgeText: {
     fontSize: 10,
     fontWeight: '600',
     color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  badgeTextGenerating: {
+    color: '#60A5FA', // Blue
+  },
+  badgeTextGenerated: {
+    color: '#4ADE80', // Green
   },
   content: {
     flex: 1,

@@ -47,6 +47,9 @@ export interface LessonWithOutputs extends Lesson {
   
   /** Whether lesson has podcast audio */
   hasPodcast: boolean;
+  
+  /** Whether lesson has generated video */
+  hasVideo: boolean;
 }
 
 /**

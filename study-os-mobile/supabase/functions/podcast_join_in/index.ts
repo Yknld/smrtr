@@ -301,7 +301,8 @@ Generate the join-in response now:
 
     console.log(`[${requestId}] ✅ Parsed ${joinInScript.segments.length} join-in segments`);
 
-    // 5. Find the highest seq number to append after
+    // 5. Find the highest seq to append after acknowledgment
+    // Acknowledgment is at lastSeq + 1000, so response starts at + 1001
     const { data: lastSegment } = await supabaseClient
       .from("podcast_segments")
       .select("seq")
@@ -310,9 +311,11 @@ Generate the join-in response now:
       .limit(1)
       .single();
 
-    const startingSeq = (lastSegment?.seq || 0) + 1000; // Use offset to mark as "join-in" segments
+    const startingSeq = (lastSegment?.seq || 0) + 1001; // After acknowledgment at +1000
+    
+    console.log(`[${requestId}] Inserting ${joinInScript.segments.length} response segments starting at seq ${startingSeq}`);
 
-    // 6. Insert join-in segments into database
+    // 6. Insert join-in response segments into database
     const joinInSegmentsToInsert = joinInScript.segments.map((segment, index) => ({
       user_id: episode.user_id,
       episode_id: episode_id,

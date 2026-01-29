@@ -33,7 +33,7 @@ interface AssetsScreenProps {
 }
 
 // Asset types matching database schema
-export type AssetKind = 'notes' | 'pdf' | 'slides' | 'image' | 'audio' | 'other';
+export type AssetKind = 'notes' | 'pdf' | 'slides' | 'image' | 'audio' | 'video' | 'other';
 
 export interface Asset {
   id: string;
@@ -62,6 +62,7 @@ interface GroupedAssets {
   slides: Asset[];
   images: Asset[];
   audio: Asset[];
+  videos: Asset[];
   youtube: YouTubeResource[];
 }
 
@@ -81,6 +82,7 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({ route, navigation })
     slides: [],
     images: [],
     audio: [],
+    videos: [],
     youtube: [],
   });
   const [uploadMenuVisible, setUploadMenuVisible] = useState(false);
@@ -95,11 +97,12 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({ route, navigation })
   const fetchAssets = async () => {
     setLoading(true);
     try {
-      // Fetch assets from Supabase
+      // Fetch assets from Supabase (only ones that are ready - have storage_path)
       const { data: assetData, error: assetError } = await supabase
         .from('lesson_assets')
         .select('*')
         .eq('lesson_id', lessonId)
+        .not('storage_path', 'is', null)
         .order('created_at', { ascending: false });
 
       if (assetError) throw assetError;
@@ -111,11 +114,21 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({ route, navigation })
         slides: [],
         images: [],
         audio: [],
+        videos: [],
         youtube: [],
       };
 
       if (assetData) {
+        console.log('[Assets] Fetched assets:', assetData.length, 'items');
+        console.log('[Assets] Asset kinds:', assetData.map((a: any) => a.kind));
+        
         assetData.forEach((asset: any) => {
+          // Skip assets without storage_path (shouldn't happen with query filter, but be safe)
+          if (!asset.storage_path) {
+            console.log('[Assets] Skipping asset without storage_path:', asset.id, asset.kind);
+            return;
+          }
+          
           const assetItem: Asset = {
             id: asset.id,
             kind: asset.kind,
@@ -136,9 +149,14 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({ route, navigation })
             grouped.images.push(assetItem);
           } else if (asset.kind === 'audio') {
             grouped.audio.push(assetItem);
+          } else if (asset.kind === 'video') {
+            console.log('[Assets] Adding video:', asset.id, asset.storage_path);
+            grouped.videos.push(assetItem);
           }
         });
       }
+      
+      console.log('[Assets] Grouped assets - Videos:', grouped.videos.length);
 
       // Fetch lesson notes from lesson_outputs
       const { data: notesData, error: notesError } = await supabase
@@ -495,6 +513,7 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({ route, navigation })
                 ...assets.slides,
                 ...assets.images,
                 ...assets.audio,
+                ...assets.videos,
               ];
               const asset = allAssets.find((a) => a.id === assetId);
 
@@ -560,6 +579,7 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({ route, navigation })
       assets.slides.length +
       assets.images.length +
       assets.audio.length +
+      assets.videos.length +
       assets.youtube.length
     );
   };
@@ -573,6 +593,8 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({ route, navigation })
     isYouTube: boolean = false
   ) => {
     if (items.length === 0) return null;
+
+    console.log(`[Assets] Rendering section "${title}" with ${items.length} items`);
 
     return (
       <View style={styles.section}>
@@ -659,7 +681,8 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({ route, navigation })
               </View>
             )}
 
-            {/* Asset Sections */}
+            {/* Asset Sections - Videos first! */}
+            {renderSection('Videos', assets.videos)}
             {renderSection('Notes', assets.notes)}
             {renderSection('PDFs', assets.pdfs)}
             {renderSection('Slides', assets.slides)}

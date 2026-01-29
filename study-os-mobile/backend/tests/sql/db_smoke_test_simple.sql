@@ -12,7 +12,8 @@ DO $$
 DECLARE
   v_user_id_1 uuid := gen_random_uuid();
   v_user_id_2 uuid := gen_random_uuid();
-  v_course_id uuid;
+  v_course_id uuid;   
+  
   v_lesson_id uuid;
   v_session_id uuid;
 BEGIN

@@ -7,12 +7,14 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "dev": "expo start --dev-client"
+    "dev": "expo start --dev-client",
+    "build:ios:testflight": "eas build --platform ios --profile production",
+    "submit:ios:testflight": "eas submit --platform ios --latest"
   },
   "dependencies": {
-    "@expo/vector-icons": "^15.0.3",
-    "@react-native-async-storage/async-storage": "^2.2.0",
-    "@react-native-community/datetimepicker": "^7.6.3",
+    "@expo/vector-icons": "^14.0.0",
+    "@react-native-async-storage/async-storage": "1.21.0",
+    "@react-native-community/datetimepicker": "7.7.0",
     "@react-navigation/bottom-tabs": "^6.6.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
@@ -20,12 +22,12 @@
     "base-64": "^1.0.0",
     "expo": "~50.0.0",
     "expo-av": "~13.10.6",
-    "expo-dev-client": "^6.0.20",
+    "expo-dev-client": "~3.3.12",
     "expo-document-picker": "~11.10.1",
-    "expo-font": "~12.0.10",
+    "expo-font": "~11.10.3",
     "expo-image-picker": "~14.7.1",
-    "expo-screen-orientation": "^9.0.8",
-    "expo-splash-screen": "~0.27.6",
+    "expo-screen-orientation": "~6.4.1",
+    "expo-splash-screen": "~0.26.5",
     "expo-status-bar": "~1.11.1",
     "react": "18.2.0",
     "react-native": "0.73.6",
@@ -34,8 +36,8 @@
     "react-native-gesture-handler": "~2.14.0",
     "react-native-safe-area-context": "4.8.2",
     "react-native-screens": "~3.29.0",
-    "react-native-svg": "^15.15.1",
-    "react-native-webview": "^13.16.0"
+    "react-native-svg": "14.1.0",
+    "react-native-webview": "13.6.4"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

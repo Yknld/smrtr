@@ -18,12 +18,14 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "We use the microphone to transcribe your speech in real time for study notes.",
         "NSSpeechRecognitionUsageDescription": "We use speech recognition to provide accurate transcription for your study materials."
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "package": "com.studyos.mobile",
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "plugins": [
@@ -34,6 +36,12 @@
         }
       ],
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "407d8610-822e-4202-bcfe-563f33a0fe81"
+      }
+    },
+    "owner": "yktest1"
   }
 }

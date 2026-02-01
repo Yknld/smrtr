@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../config/supabase';
 import { colors, spacing, typography, borderRadius, shadows } from '../../ui/tokens';
 
@@ -41,6 +42,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) =>
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Settings</Text>
+          <TouchableOpacity
+            style={styles.profileHeaderButton}
+            onPress={() => navigation?.navigate('Analytics')}
+            accessibilityLabel="Profile and progress"
+            accessibilityHint="View your progress and in-depth analytics"
+          >
+            <Ionicons name="person-outline" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
         </View>
         
         <ScrollView style={styles.content}>
@@ -169,6 +178,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
     paddingBottom: spacing.md,
@@ -179,6 +191,10 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     color: colors.textPrimary,
     letterSpacing: 0,
+  },
+  profileHeaderButton: {
+    padding: spacing.sm,
+    marginRight: -spacing.xs,
   },
   content: {
     flex: 1,

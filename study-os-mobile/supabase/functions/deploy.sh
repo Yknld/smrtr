@@ -64,10 +64,20 @@ echo "📦 Deploying tutor_chat..."
 supabase functions deploy tutor_chat --no-verify-jwt
 
 echo ""
+echo "📦 Deploying lesson_generate_interactive..."
+supabase functions deploy lesson_generate_interactive --no-verify-jwt
+
+echo ""
+echo "📦 Deploying lesson_generate_interactive_reset..."
+supabase functions deploy lesson_generate_interactive_reset --no-verify-jwt
+
+echo ""
 echo "✅ All functions deployed successfully!"
 echo ""
-echo "⚠️  Don't forget to set secrets:"
+echo "⚠️  Don't forget to set secrets (per function):"
 echo "   supabase secrets set GEMINI_API_KEY=your_key"
+echo "   supabase secrets set RUNPOD_API_KEY=your_key   # for lesson_generate_interactive"
+echo "   supabase secrets set RUNPOD_ENDPOINT=your_endpoint_id"
 echo ""
 echo "📚 Test with:"
 echo "   curl https://your-project.supabase.co/functions/v1/transcribe_start \\"

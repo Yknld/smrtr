@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus, Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
-import * as ScreenOrientation from 'expo-screen-orientation';
 import { colors } from '../../ui/tokens';
 
 interface VideoPlayerScreenProps {
@@ -32,32 +31,21 @@ export const VideoPlayerScreen: React.FC<VideoPlayerScreenProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Configure audio and orientation on mount
+  // Configure audio for playback (orientation unlock removed to avoid requiring expo-screen-orientation native module)
   useEffect(() => {
     const setupPlayer = async () => {
       try {
-        // Configure audio session for playback
         await Audio.setAudioModeAsync({
           playsInSilentModeIOS: true,
           staysActiveInBackground: false,
           shouldDuckAndroid: true,
         });
-        
-        // Unlock all orientations for video playback
-        await ScreenOrientation.unlockAsync();
-        
-        console.log('[VideoPlayer] Audio and orientation configured');
+        console.log('[VideoPlayer] Audio configured');
       } catch (err) {
         console.error('[VideoPlayer] Setup error:', err);
       }
     };
-
     setupPlayer();
-
-    // Cleanup: lock to portrait when leaving
-    return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-    };
   }, []);
 
   const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {

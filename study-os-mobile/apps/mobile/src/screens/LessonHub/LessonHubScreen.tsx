@@ -17,7 +17,7 @@ import { BottomSheet, BottomSheetAction } from '../../components/BottomSheet/Bot
 import { RenameLessonModal } from '../../components/RenameLessonModal/RenameLessonModal';
 import { ScheduleBottomSheet } from '../../components/ScheduleBottomSheet/ScheduleBottomSheet';
 import { updateLessonTitle } from '../../data/lessons.repository';
-import { supabase } from '../../config/supabase';
+import { supabase, SUPABASE_URL } from '../../config/supabase';
 import { generateYouTubeRecommendations, fetchYouTubeResources } from '../../data/youtube.repository';
 import { upsertStudyPlan, buildRRule } from '../../data/schedule.repository';
 import { preloadPodcast } from '../../data/podcasts.repository';
@@ -40,6 +40,7 @@ interface LessonData {
     quiz: boolean;
     podcast: boolean;
     video: boolean;
+    interactive_pages: boolean;
   };
   processing: Set<string>;
 }
@@ -64,6 +65,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
       quiz: false,
       podcast: false,
       video: false,
+      interactive_pages: false,
     },
     processing: new Set(),
   });
@@ -166,6 +168,15 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
     };
   }, [lessonId]);
 
+  // Poll for updates while Interact is generating (Realtime may not be enabled for lesson_outputs)
+  useEffect(() => {
+    if (!lessonData.processing.has('interactive_pages')) return;
+    const interval = setInterval(() => {
+      loadLessonData();
+    }, 12000);
+    return () => clearInterval(interval);
+  }, [lessonId, lessonData.processing.has('interactive_pages')]);
+
   const loadLessonData = async () => {
     try {
       // Fetch notes from lesson_outputs
@@ -203,6 +214,8 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
 
       if (!outputsError && outputs) {
         const outputsMap = outputs.reduce((acc: any, output: any) => {
+          const current = acc[output.type];
+          if (current === 'ready') return acc;
           acc[output.type] = output.status;
           return acc;
         }, {});
@@ -212,10 +225,12 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
         // Check for processing states
         if (outputsMap.flashcards === 'processing') processing.add('flashcards');
         if (outputsMap.quiz === 'processing') processing.add('quiz');
-        
-        // Check assets for podcast and video
+        if (outputsMap.interactive_pages === 'processing' || outputsMap.interactive_pages === 'queued') processing.add('interactive_pages');
+
+        // Check assets for podcast and video; lesson_outputs for interactive_pages
         const hasPodcast = assets?.some((a: any) => a.kind === 'audio') || false;
         const hasVideo = assets?.some((a: any) => a.kind === 'video') || false;
+        const hasInteractivePages = outputsMap.interactive_pages === 'ready';
 
         setLessonData(prev => ({
           ...prev,
@@ -224,6 +239,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
             quiz: outputsMap.quiz === 'ready',
             podcast: hasPodcast,
             video: hasVideo,
+            interactive_pages: hasInteractivePages,
           },
           processing,
         }));
@@ -233,6 +249,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
           quiz: outputsMap.quiz,
           podcast: hasPodcast,
           video: hasVideo,
+          interactive_pages: hasInteractivePages,
         });
       }
       
@@ -270,8 +287,45 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
     }
   };
 
+  const handleResetInteractiveGeneration = async () => {
+    setMenuVisible(false);
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+      const response = await fetch(
+        `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/lesson_generate_interactive_reset`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ lesson_id: lessonId }),
+        }
+      );
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to reset');
+      }
+      await loadLessonData();
+    } catch (error: any) {
+      console.error('Reset interactive generation:', error);
+      alert(error.message || 'Failed to reset Interact generation');
+    }
+  };
+
+  const isInteractGenerating = lessonData.processing.has('interactive_pages');
+
   // Overflow menu actions
   const menuActions: BottomSheetAction[] = [
+    ...(isInteractGenerating
+      ? [{
+          label: 'Cancel Interact generation',
+          onPress: handleResetInteractiveGeneration,
+        }]
+      : []),
     {
       label: 'Rename Lesson',
       onPress: () => {
@@ -494,8 +548,57 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
     });
   };
 
+  const handleInteractiveSolver = () => {
+    navigation.navigate('InteractiveSolver', {
+      lessonId,
+      lessonTitle: currentTitle,
+    });
+  };
+
+  const handleGenerateInteractivePages = async () => {
+    try {
+      setLessonData(prev => ({
+        ...prev,
+        processing: new Set(prev.processing).add('interactive_pages'),
+      }));
+
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+
+      const response = await fetch(
+        `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/lesson_generate_interactive`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ lesson_id: lessonId }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || err.error || 'Failed to start interactive generation');
+      }
+
+      const result = await response.json();
+      console.log('[LessonHub] Interactive generation started:', result.job_id);
+    } catch (error: any) {
+      console.error('Error generating interactive module:', error);
+      alert(error.message || 'Failed to generate interactive module. Please try again.');
+      setLessonData(prev => {
+        const next = new Set(prev.processing);
+        next.delete('interactive_pages');
+        return { ...prev, processing: next };
+      });
+    }
+  };
+
   // Helper to get badge state for generatable content
-  const getBadgeState = (contentType: 'flashcards' | 'quiz' | 'podcast' | 'video'): 'Generate' | 'Generating' | 'Generated' | undefined => {
+  const getBadgeState = (contentType: 'flashcards' | 'quiz' | 'podcast' | 'video' | 'interactive_pages'): 'Generate' | 'Generating' | 'Generated' | undefined => {
     if (lessonData.processing.has(contentType)) {
       return 'Generating';
     }
@@ -612,7 +715,25 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
 
           {/* Action Grid - SECONDARY, ordered by importance */}
           <View style={styles.grid}>
-            {/* 1. Live Transcription (includes translation + listen) */}
+            {/* 1. Interact (interactive pages from RunPod) */}
+            <View style={styles.gridItem}>
+              <ActionTile
+                icon="game-controller-outline"
+                label="Interact"
+                subtitle="Practice steps"
+                badge={getBadgeState('interactive_pages')}
+                disabled={lessonData.processing.has('interactive_pages')}
+                onPress={() => {
+                  if (lessonData.outputs.interactive_pages) {
+                    handleInteractiveSolver();
+                  } else {
+                    handleGenerateInteractivePages();
+                  }
+                }}
+              />
+            </View>
+
+            {/* 2. Live Transcription (includes translation + listen) */}
             <View style={styles.gridItem}>
               <ActionTile
                 icon="radio-outline"
@@ -622,7 +743,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
               />
             </View>
             
-            {/* 2. AI Tutor */}
+            {/* 3. AI Tutor */}
             <View style={styles.gridItem}>
               <ActionTile
                 icon="chatbubbles-outline"
@@ -631,7 +752,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
               />
             </View>
             
-            {/* 3. Flashcards */}
+            {/* 4. Flashcards */}
             <View style={styles.gridItem}>
               <ActionTile
                 icon="layers-outline"
@@ -642,7 +763,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
               />
             </View>
             
-            {/* 4. Quiz */}
+            {/* 5. Quiz */}
             <View style={styles.gridItem}>
               <ActionTile
                 icon="help-circle-outline"
@@ -653,7 +774,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
               />
             </View>
             
-            {/* 5. Podcast */}
+            {/* 6. Podcast */}
             <View style={styles.gridItem}>
               <ActionTile
                 icon="mic-outline"
@@ -664,7 +785,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
               />
             </View>
             
-            {/* 6. Video */}
+            {/* 7. Video */}
             <View style={styles.gridItem}>
               <ActionTile
                 icon="videocam-outline"
@@ -683,8 +804,8 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
                 }}
               />
             </View>
-            
-            {/* 7. Assets */}
+
+            {/* 8. Assets */}
             <View style={styles.gridItem}>
               <ActionTile
                 icon="folder-outline"

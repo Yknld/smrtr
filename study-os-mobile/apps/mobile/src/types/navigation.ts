@@ -32,6 +32,10 @@ export type HomeStackParamList = {
     lessonId: string;
     lessonTitle: string;
   };
+  InteractiveSolver: {
+    lessonId: string;
+    lessonTitle: string;
+  };
   Flashcards: {
     lessonId: string;
     lessonTitle: string;

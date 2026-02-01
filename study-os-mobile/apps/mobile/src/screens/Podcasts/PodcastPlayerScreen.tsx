@@ -1248,34 +1248,6 @@ export const PodcastPlayerScreen: React.FC<PodcastPlayerScreenProps> = ({ route,
         </View>
         )}
 
-        {/* Join in Mic Button - Only show when ready */}
-        {episode?.status === 'ready' && !loadError && (
-        <View style={styles.joinMicContainer}>
-          <TouchableOpacity
-            style={[
-              styles.joinMicButton,
-              isInLiveSession && styles.joinMicButtonActive,
-            ]}
-            onPress={handleJoinMic}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={isInLiveSession ? 'mic' : 'mic-outline'}
-              size={20}
-              color={isInLiveSession ? colors.background : colors.textPrimary}
-            />
-            <Text
-              style={[
-                styles.joinMicText,
-                isInLiveSession && styles.joinMicTextActive,
-              ]}
-            >
-              {isInLiveSession ? 'Live - Tap to leave' : 'Join in & ask questions'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        )}
-
         {/* Engagement Row - Only show when ready */}
         {episode?.status === 'ready' && !loadError && (
         <View style={styles.engagementRow}>

@@ -1,0 +1,16 @@
+/* iOS: TabNavigator fills screen, content area above tab bar */
+.so-app {
+  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #1F1F1F;
+}
+
+.so-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}

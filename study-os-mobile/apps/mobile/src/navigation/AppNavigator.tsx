@@ -17,6 +17,7 @@ import { PodcastPlayerScreen } from '../screens/Podcasts/PodcastPlayerScreen';
 import { NotesViewScreen } from '../screens/Notes/NotesViewScreen';
 import { AllSchedulesScreen } from '../screens/AllSchedules/AllSchedulesScreen';
 import { VideoPlayerScreen } from '../screens/VideoPlayer/VideoPlayerScreen';
+import { InteractiveSolverScreen } from '../screens/InteractiveSolver/InteractiveSolverScreen';
 import { SettingsScreen } from '../screens/Settings/SettingsScreen';
 import { ProfileScreen } from '../screens/Settings/ProfileScreen';
 import { NotificationsScreen } from '../screens/Settings/NotificationsScreen';
@@ -46,6 +47,7 @@ const HomeStack = () => {
       <Stack.Screen name="NotesView" component={NotesViewScreen} />
       <Stack.Screen name="AllSchedules" component={AllSchedulesScreen} />
       <Stack.Screen name="VideoPlayer" component={VideoPlayerScreen} />
+      <Stack.Screen name="InteractiveSolver" component={InteractiveSolverScreen} />
     </Stack.Navigator>
   );
 };

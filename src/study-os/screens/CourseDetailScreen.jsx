@@ -22,6 +22,8 @@ export default function CourseDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [sheetVisible, setSheetVisible] = useState(false)
+  const [newLessonName, setNewLessonName] = useState('')
+  const [creating, setCreating] = useState(false)
 
   const loadLessons = async () => {
     if (!isValidUuid(courseId)) {
@@ -51,16 +53,27 @@ export default function CourseDetailScreen() {
     navigate(`/app/lesson/${lesson.id}`, { state: { lessonTitle: lesson.title } })
   }
 
-  const handleCreateBlankLesson = async () => {
-    setSheetVisible(false)
+  const handleCreateLesson = async (e) => {
+    e?.preventDefault()
+    const name = (newLessonName || '').trim() || `Lesson ${lessons.length + 1}`
     if (!isValidUuid(courseId)) return
+    setCreating(true)
     try {
-      const newLesson = await createLesson(courseId, `Lesson ${lessons.length + 1}`, 'upload')
+      const newLesson = await createLesson(courseId, name, 'upload')
+      setSheetVisible(false)
+      setNewLessonName('')
       await loadLessons()
       navigate(`/app/lesson/${newLesson.id}`, { state: { lessonTitle: newLesson.title } })
     } catch (e) {
       console.error('Failed to create lesson:', e?.message)
+    } finally {
+      setCreating(false)
     }
+  }
+
+  const closeModal = () => {
+    setSheetVisible(false)
+    setNewLessonName('')
   }
 
   return (
@@ -107,21 +120,30 @@ export default function CourseDetailScreen() {
 
         {sheetVisible && (
           <div className="so-modal-overlay" role="dialog" aria-modal="true">
-            <div className="so-modal-backdrop" onClick={() => setSheetVisible(false)} />
+            <div className="so-modal-backdrop" onClick={closeModal} />
             <div className="so-modal so-modal-sm">
               <h2 className="so-modal-title">New lesson</h2>
-              <button type="button" className="so-sheet-item" onClick={handleCreateBlankLesson}>
-                New Blank Lesson
-              </button>
-              <button type="button" className="so-sheet-item" onClick={() => setSheetVisible(false)}>
-                Import YouTube
-              </button>
-              <button type="button" className="so-sheet-item" onClick={() => setSheetVisible(false)}>
-                Upload Files
-              </button>
-              <button type="button" className="so-modal-btn so-modal-btn--cancel" onClick={() => setSheetVisible(false)}>
-                Cancel
-              </button>
+              <form onSubmit={handleCreateLesson}>
+                <div className="so-modal-section">
+                  <input
+                    type="text"
+                    className="so-modal-input"
+                    placeholder="Lesson name"
+                    value={newLessonName}
+                    onChange={(e) => setNewLessonName(e.target.value)}
+                    autoFocus
+                    disabled={creating}
+                  />
+                </div>
+                <div className="so-modal-actions">
+                  <button type="button" className="so-modal-btn so-modal-btn--cancel" onClick={closeModal} disabled={creating}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="so-modal-btn so-modal-btn--create" disabled={creating}>
+                    {creating ? 'Creating…' : 'Create'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

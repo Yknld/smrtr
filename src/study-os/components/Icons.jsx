@@ -2,7 +2,8 @@
  * Inline SVG icons (Ionicons-style) – no emoji, no external lib.
  * All icons 24px viewBox, currentColor for fill/stroke.
  */
-const size = 24
+const DEFAULT_ICON_SIZE = 24
+const size = DEFAULT_ICON_SIZE
 const stroke = 'currentColor'
 const strokeWidth = 2
 
@@ -224,7 +225,7 @@ const iconMap = {
   trash: IconTrash,
 }
 
-export function Icon({ name, className = '', size: s = size }) {
+export function Icon({ name, className = '', size: s = DEFAULT_ICON_SIZE }) {
   const C = iconMap[name]
   if (!C) return null
   return <C className={className} size={s} />

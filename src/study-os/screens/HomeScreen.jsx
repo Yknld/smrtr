@@ -96,20 +96,11 @@ export default function HomeScreen() {
           <button
             type="button"
             className="so-home-header-btn"
-            onClick={() => navigate('/app/settings/analytics')}
-            aria-label="Profile and progress"
-            title="View your progress and analytics"
+            onClick={() => navigate('/app/settings/profile')}
+            aria-label="Profile"
+            title="Profile"
           >
             <Icon name="person" size={22} />
-          </button>
-          <button
-            type="button"
-            className="so-home-header-btn"
-            onClick={() => navigate('/app/settings')}
-            aria-label="Settings"
-            title="Settings"
-          >
-            <Icon name="settings" size={22} />
           </button>
         </div>
       </header>

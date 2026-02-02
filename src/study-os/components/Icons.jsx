@@ -221,6 +221,7 @@ const iconMap = {
   chevronUp: IconChevronUp,
   person: IconPerson,
   settings: IconSettings,
+  trash: IconTrash,
 }
 
 export function Icon({ name, className = '', size: s = size }) {

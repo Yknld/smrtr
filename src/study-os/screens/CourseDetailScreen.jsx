@@ -3,7 +3,8 @@
  */
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { fetchLessons, createLesson } from '../data/lessons.repository'
+import { fetchLessons, createLesson, deleteLesson } from '../data/lessons.repository'
+import { deleteCourse } from '../data/courses.repository'
 import { isValidUuid } from '../utils/uuid'
 import LessonCard from '../components/LessonCard'
 import LoadingState from '../components/LoadingState'
@@ -24,6 +25,8 @@ export default function CourseDetailScreen() {
   const [sheetVisible, setSheetVisible] = useState(false)
   const [newLessonName, setNewLessonName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const loadLessons = async () => {
     if (!isValidUuid(courseId)) {
@@ -76,6 +79,32 @@ export default function CourseDetailScreen() {
     setNewLessonName('')
   }
 
+  const handleDeleteCourse = async () => {
+    setMenuOpen(false)
+    if (!window.confirm(`Delete course "${courseTitle}"? All lessons in this course will be removed.`)) return
+    setDeleting(true)
+    try {
+      await deleteCourse(courseId)
+      navigate('/app', { replace: true })
+    } catch (e) {
+      console.error('Failed to delete course:', e?.message)
+      alert(e?.message || 'Failed to delete course')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleDeleteLesson = async (lesson) => {
+    if (!window.confirm(`Delete lesson "${lesson.title}"?`)) return
+    try {
+      await deleteLesson(lesson.id)
+      await loadLessons()
+    } catch (e) {
+      console.error('Failed to delete lesson:', e?.message)
+      alert(e?.message || 'Failed to delete lesson')
+    }
+  }
+
   return (
     <div className="so-screen">
       {/* Header – same as iOS */}
@@ -84,9 +113,34 @@ export default function CourseDetailScreen() {
           <Icon name="back" size={24} />
         </button>
         <h1 className="so-detail-title">{courseTitle}</h1>
-        <button type="button" className="so-detail-menu-btn" aria-label="Menu">
-          <Icon name="more" size={24} />
-        </button>
+        <div className="so-detail-menu-wrap">
+          <button
+            type="button"
+            className="so-detail-menu-btn"
+            aria-label="Menu"
+            aria-expanded={menuOpen}
+            aria-haspopup="true"
+            onClick={() => setMenuOpen((v) => !v)}
+            disabled={deleting}
+          >
+            <Icon name="more" size={24} />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="so-detail-menu-backdrop" onClick={() => setMenuOpen(false)} aria-hidden />
+              <div className="so-detail-menu-dropdown" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="so-detail-menu-item so-detail-menu-item--danger"
+                  onClick={handleDeleteCourse}
+                >
+                  Delete course
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="so-screen-inner">
@@ -110,6 +164,8 @@ export default function CourseDetailScreen() {
                   key={lesson.id}
                   lesson={lesson}
                   onPress={handleLessonPress}
+                  onLongPress={handleDeleteLesson}
+                  onDelete={handleDeleteLesson}
                 />
               ))}
             </div>

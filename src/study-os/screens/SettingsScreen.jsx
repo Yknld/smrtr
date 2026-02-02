@@ -37,9 +37,9 @@ export default function SettingsScreen() {
         <button
           type="button"
           className="so-settings-header-profile"
-          onClick={() => navigate('/app/settings/analytics')}
-          aria-label="Profile and progress"
-          title="View your progress and in-depth analytics"
+          onClick={() => navigate('/app/settings/profile')}
+          aria-label="Profile"
+          title="Profile"
         >
           <Icon name="person" size={24} />
         </button>

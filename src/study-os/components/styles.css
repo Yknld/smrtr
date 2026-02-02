@@ -134,17 +134,42 @@
 
 /* LessonCard.tsx */
 .so-lesson-card {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
   background-color: #1F1F1F;
   border-radius: 8px;
   border: 1px solid #2A2A2A;
   margin-bottom: 16px;
-  cursor: pointer;
   padding: 0;
   text-align: left;
   width: 100%;
   box-sizing: border-box;
 }
-.so-lesson-card:hover { opacity: 0.9; }
+.so-lesson-card-main {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+.so-lesson-card-main:hover { opacity: 0.9; }
+.so-lesson-card-delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  background: none;
+  border: none;
+  border-left: 1px solid #2A2A2A;
+  color: #8A8A8A;
+  cursor: pointer;
+  padding: 0;
+}
+.so-lesson-card-delete:hover { color: #F87171; background-color: rgba(248, 113, 113, 0.08); }
 .so-lesson-content {
   padding-top: 16px;
   padding-bottom: 16px;

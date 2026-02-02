@@ -21,39 +21,62 @@ function formatLastOpened(date) {
 const LessonStatusLabels = { draft: 'Draft', ready: 'Ready', processing: 'Processing', failed: 'Failed' }
 const LessonStatusColors = { draft: '#8A8A8A', ready: '#4ADE80', processing: '#60A5FA', failed: '#F87171' }
 
-export default function LessonCard({ lesson, onPress, onLongPress }) {
+export default function LessonCard({ lesson, onPress, onLongPress, onDelete }) {
   const status = (lesson.status === 'upload' ? 'draft' : lesson.status) || 'draft'
   const statusColor = LessonStatusColors[status] || LessonStatusColors.draft
   const label = LessonStatusLabels[status] || status
   const hasOutputs = lesson.hasSummary || lesson.hasFlashcards || lesson.hasQuiz || lesson.hasVideo
 
+  const handleMainClick = () => onPress(lesson)
+  const handleDeleteClick = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onDelete?.(lesson)
+  }
+
   return (
-    <button
-      type="button"
-      className="so-lesson-card"
-      onClick={() => onPress(lesson)}
-      onContextMenu={(e) => { e.preventDefault(); onLongPress?.(lesson) }}
-    >
-      <div className="so-lesson-content">
-        <div className="so-lesson-header">
-          <h3 className="so-lesson-title">{lesson.title}</h3>
-          <span
-            className="so-lesson-pill"
-            style={{ backgroundColor: statusColor + '20', color: statusColor }}
-          >
-            {label}
-          </span>
-        </div>
-        <p className="so-lesson-subtitle">Last opened {formatLastOpened(lesson.lastOpenedAt)}</p>
-        {hasOutputs && (
-          <div className="so-lesson-output-icons">
-            {lesson.hasSummary && <span className="so-lesson-output-icon" aria-hidden><Icon name="fileText" size={14} /></span>}
-            {lesson.hasFlashcards && <span className="so-lesson-output-icon" aria-hidden><Icon name="layers" size={14} /></span>}
-            {lesson.hasQuiz && <span className="so-lesson-output-icon" aria-hidden><Icon name="help" size={14} /></span>}
-            {lesson.hasVideo && <span className="so-lesson-output-icon" aria-hidden><Icon name="video" size={14} /></span>}
+    <div className="so-lesson-card">
+      <div
+        className="so-lesson-card-main"
+        onClick={handleMainClick}
+        onContextMenu={(e) => { e.preventDefault(); onLongPress?.(lesson) }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMainClick() } }}
+        aria-label={lesson.title}
+      >
+        <div className="so-lesson-content">
+          <div className="so-lesson-header">
+            <h3 className="so-lesson-title">{lesson.title}</h3>
+            <span
+              className="so-lesson-pill"
+              style={{ backgroundColor: statusColor + '20', color: statusColor }}
+            >
+              {label}
+            </span>
           </div>
-        )}
+          <p className="so-lesson-subtitle">Last opened {formatLastOpened(lesson.lastOpenedAt)}</p>
+          {hasOutputs && (
+            <div className="so-lesson-output-icons">
+              {lesson.hasSummary && <span className="so-lesson-output-icon" aria-hidden><Icon name="fileText" size={14} /></span>}
+              {lesson.hasFlashcards && <span className="so-lesson-output-icon" aria-hidden><Icon name="layers" size={14} /></span>}
+              {lesson.hasQuiz && <span className="so-lesson-output-icon" aria-hidden><Icon name="help" size={14} /></span>}
+              {lesson.hasVideo && <span className="so-lesson-output-icon" aria-hidden><Icon name="video" size={14} /></span>}
+            </div>
+          )}
+        </div>
       </div>
-    </button>
+      {onDelete && (
+        <button
+          type="button"
+          className="so-lesson-card-delete"
+          onClick={handleDeleteClick}
+          aria-label="Delete lesson"
+          title="Delete lesson"
+        >
+          <Icon name="trash" size={18} />
+        </button>
+      )}
+    </div>
   )
 }

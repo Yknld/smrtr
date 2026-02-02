@@ -7,10 +7,9 @@ const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL || 'user1@test.com'
 const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || 'password123'
 
 export default function AppShell() {
-  const [authReady, setAuthReady] = useState(!import.meta.env.DEV)
+  const [authReady, setAuthReady] = useState(false)
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return
     let cancelled = false
     ;(async () => {
       try {

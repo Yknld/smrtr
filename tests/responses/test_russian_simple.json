@@ -1,7 +1,0 @@
-{
-  "input": {
-    "text": "Привет, как дела?",
-    "language": "ru",
-    "voice": "/app/runpod/russian_voice.flac"
-  }
-}

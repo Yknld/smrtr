@@ -39,7 +39,7 @@ export const TermsOfServiceScreen: React.FC<TermsOfServiceScreenProps> = ({ navi
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Agreement to Terms</Text>
             <Text style={styles.paragraph}>
-              By accessing or using Study OS, you agree to be bound by these Terms of 
+              By accessing or using Smartr, you agree to be bound by these Terms of 
               Service. If you disagree with any part of these terms, you may not access 
               the service.
             </Text>
@@ -60,7 +60,7 @@ export const TermsOfServiceScreen: React.FC<TermsOfServiceScreenProps> = ({ navi
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>User Content</Text>
             <Text style={styles.paragraph}>
-              You retain all rights to content you upload to Study OS. By uploading 
+              You retain all rights to content you upload to Smartr. By uploading 
               content, you grant us a license to use, store, and process your content 
               to provide our services.
             </Text>
@@ -70,7 +70,7 @@ export const TermsOfServiceScreen: React.FC<TermsOfServiceScreenProps> = ({ navi
             <Text style={styles.sectionTitle}>Intellectual Property</Text>
             <Text style={styles.paragraph}>
               The service and its original content, features, and functionality are 
-              owned by Study OS and are protected by international copyright, trademark, 
+              owned by Smartr and are protected by international copyright, trademark, 
               and other intellectual property laws.
             </Text>
           </View>
@@ -86,7 +86,7 @@ export const TermsOfServiceScreen: React.FC<TermsOfServiceScreenProps> = ({ navi
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Limitation of Liability</Text>
             <Text style={styles.paragraph}>
-              In no event shall Study OS be liable for any indirect, incidental, special, 
+              In no event shall Smartr be liable for any indirect, incidental, special, 
               consequential, or punitive damages resulting from your use of the service.
             </Text>
           </View>

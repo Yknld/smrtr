@@ -260,7 +260,7 @@ export class AssemblyLiveService {
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
           {
             title: 'Microphone Permission',
-            message: 'StudyOS needs access to your microphone for transcription',
+            message: 'Smartr needs access to your microphone for transcription',
             buttonNeutral: 'Ask Me Later',
             buttonNegative: 'Cancel',
             buttonPositive: 'OK',

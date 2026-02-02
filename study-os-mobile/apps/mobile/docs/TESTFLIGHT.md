@@ -63,3 +63,46 @@ To use a different EAS profile, pass `--profile <name>` to `eas build` and `eas 
    Let `pod install` finish. Commit the updated `ios/` and `package-lock.json` before running the EAS build again.
 
 4. **EAS image**: Production iOS builds use `"image": "latest"` in `eas.json` so EAS uses a current macOS/Xcode image. If you hit image-specific errors, you can pin an image (e.g. `macos-sonoma-14.4-xcode-15.3`) in the `production.ios` section.
+
+---
+
+## If submit to TestFlight fails (Fastlane pilot / altool)
+
+When you see "Fastlane pilot failed" or "altool completed with a non-zero exit status: 1", the real error is in the submission logs.
+
+1. **Get the real error**
+   - **EAS dashboard**: [expo.dev](https://expo.dev) → your account → project **study-os-mobile** → **Submissions** → open the failed submission → open the **logs** and scroll for the first red/error line (often an auth error or "Unable to process" from Apple).
+   - **Local**: Run submit with verbose logs:
+     ```bash
+     eas submit --platform ios --latest --verbose
+     ```
+     and look for the line above "Fastlane pilot failed" (e.g. invalid credentials, duplicate build, missing app).
+
+2. **Prerequisites for TestFlight**
+   - **App in App Store Connect**: You must have an app in [App Store Connect](https://appstoreconnect.apple.com) with bundle ID **com.studyos.mobile**. If you haven’t created it yet: Apps → + → New App → set bundle ID to `com.studyos.mobile`.
+   - **App Store Connect App ID (ascAppId)**: In App Store Connect, open your app → App Information → **Apple ID** (numeric, e.g. `1234567890`). EAS will ask for this on first submit, or you can set it in `eas.json` under `submit.production.ios.ascAppId` so it isn’t prompted every time.
+
+3. **Credentials**
+   - **Apple ID + app-specific password**: When EAS prompts, use your Apple ID and an [app-specific password](https://appleid.apple.com) (not your normal password). If you use 2FA, an app-specific password is required.
+   - **Or App Store Connect API key**: For non-interactive/CI, use an [App Store Connect API key](https://docs.expo.dev/submit/ios/#app-store-connect-api-key) (`.p8` + Key ID + Issuer ID) and configure it in EAS (e.g. `eas credentials` or the submit step).
+
+4. **Duplicate build / version**
+   - If the error says the build or version already exists, bump `version` or `buildNumber` in `app.json` (under `expo.ios`), then run a new EAS build and submit that build.
+
+5. **Optional: set ascAppId in eas.json**
+   - After you have the numeric App Store Connect app ID, you can add a `submit` section to `eas.json` so EAS doesn’t ask every time:
+     ```json
+     "submit": {
+       "production": {
+         "ios": {
+           "ascAppId": "YOUR_APP_STORE_CONNECT_APP_ID"
+         }
+       }
+     }
+     ```
+
+6. **Upload with Transporter instead (bypass EAS Submit)**
+   - If EAS Submit keeps failing and you need the build in TestFlight, upload the .ipa yourself:
+   - Download the .ipa from the build artifact URL (e.g. the `https://expo.dev/artifacts/eas/...ipa` link EAS printed when the build finished).
+   - Install [Transporter](https://apps.apple.com/app/transporter/id1450874784) from the Mac App Store, sign in with your Apple ID, drag the .ipa in, and click **Deliver**.
+   - Transporter will show Apple’s real error if something is wrong (e.g. invalid credentials, duplicate build number). After a successful upload, the build appears in App Store Connect → your app → TestFlight in about 10–15 minutes.

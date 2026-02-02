@@ -64,3 +64,7 @@ dist-ssr
 
 # Secrets
 .secrets/
+
+# Archived / local-only (clean repo; keep gar/ and AppIcons out of GitHub)
+gar/
+AppIcons*/

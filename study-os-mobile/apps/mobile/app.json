@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Study OS",
+    "name": "Smartr",
     "slug": "study-os-mobile",
     "version": "1.0.0",
     "orientation": "default",
@@ -19,7 +19,7 @@
         "NSMicrophoneUsageDescription": "We use the microphone to transcribe your speech in real time for study notes.",
         "NSSpeechRecognitionUsageDescription": "We use speech recognition to provide accurate transcription for your study materials."
       },
-      "buildNumber": "2"
+      "buildNumber": "6"
     },
     "android": {
       "package": "com.studyos.mobile",
@@ -32,7 +32,7 @@
       [
         "expo-av",
         {
-          "microphonePermission": "Allow Study OS to access your microphone for live transcription."
+          "microphonePermission": "Allow Smartr to access your microphone for live transcription."
         }
       ],
       "expo-font"

@@ -1,4 +1,4 @@
-rootProject.name = 'Study OS'
+rootProject.name = 'Smartr'
 
 dependencyResolutionManagement {
   versionCatalogs {

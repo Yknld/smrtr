@@ -74,7 +74,7 @@ export default function App() {
       <SafeAreaView style={styles.authContainer}>
         <StatusBar barStyle="light-content" />
         <View style={styles.authContent}>
-          <Text style={styles.authTitle}>Welcome to Study OS</Text>
+          <Text style={styles.authTitle}>Welcome to Smartr</Text>
           <Text style={styles.authSubtitle}>Sign in to continue</Text>
 
           <View style={styles.form}>

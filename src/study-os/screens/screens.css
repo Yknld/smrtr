@@ -265,8 +265,10 @@
 .so-settings-header {
   flex-shrink: 0;
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
+  min-height: 56px;
   padding-left: 16px;
   padding-right: 16px;
   padding-top: 4px;
@@ -274,6 +276,10 @@
   background-color: #252525;
 }
 .so-settings-header-back {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px;
   margin-right: 8px;
   margin-left: -4px;
@@ -288,14 +294,23 @@
 }
 .so-settings-title {
   flex: 1;
+  min-width: 0;
   font-size: 24px;
   font-weight: 600;
   line-height: 32px;
   color: #C5C5C5;
   letter-spacing: 0;
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .so-settings-header-profile {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
   padding: 8px;
   margin-right: -4px;
   background: none;
@@ -372,7 +387,8 @@
   box-sizing: border-box;
 }
 .so-settings-analytics-card:hover { opacity: 0.9; }
-.so-settings-analytics-content { flex: 1; }
+.so-settings-analytics-content { flex: 1; min-width: 0; }
+.so-settings-analytics-card .so-settings-item-icon { flex-shrink: 0; margin-left: 8px; }
 .so-settings-analytics-title {
   font-size: 16px;
   font-weight: 600;
@@ -441,6 +457,7 @@
   display: flex;
   flex-direction: row;
   align-items: center;
+  min-height: 56px;
   padding-left: 16px;
   padding-right: 16px;
   padding-top: 4px;
@@ -448,6 +465,10 @@
   background-color: #252525;
 }
 .so-sub-back-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 4px;
   margin-right: 8px;
   background: none;
@@ -459,6 +480,7 @@
 }
 .so-sub-title {
   flex: 1;
+  min-width: 0;
   font-size: 20px;
   font-weight: 600;
   color: #C5C5C5;
@@ -468,7 +490,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.so-sub-spacer { width: 40px; }
+.so-sub-spacer { flex-shrink: 0; width: 40px; }
 
 /* ========== AnalyticsScreen ========== */
 .so-analytics-content {
@@ -486,12 +508,15 @@
 .so-analytics-period {
   display: flex;
   flex-direction: row;
+  flex-wrap: nowrap;
   gap: 8px;
   margin-bottom: 24px;
 }
 .so-analytics-period-btn {
   flex: 1;
-  padding: 10px 16px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 10px 8px;
   border-radius: 8px;
   border: 1px solid #2A2A2A;
   background-color: #1F1F1F;
@@ -499,6 +524,9 @@
   font-weight: 500;
   color: #8A8A8A;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .so-analytics-period-btn-active {
   background-color: rgba(139, 157, 195, 0.15);

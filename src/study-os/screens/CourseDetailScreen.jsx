@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { fetchLessons, createLesson, deleteLesson } from '../data/lessons.repository'
-import { deleteCourse } from '../data/courses.repository'
+import * as coursesRepo from '../data/courses.repository'
 import { isValidUuid } from '../utils/uuid'
 import LessonCard from '../components/LessonCard'
 import LoadingState from '../components/LoadingState'
@@ -84,7 +84,7 @@ export default function CourseDetailScreen() {
     if (!window.confirm(`Delete course "${courseTitle}"? All lessons in this course will be removed.`)) return
     setDeleting(true)
     try {
-      await deleteCourse(courseId)
+      await coursesRepo.deleteCourse(courseId)
       navigate('/app', { replace: true })
     } catch (e) {
       console.error('Failed to delete course:', e?.message)

@@ -108,7 +108,7 @@ export function searchCourses(courses, query) {
 /**
  * Delete a course and its lessons (cascade). Throws if not authenticated or not found.
  */
-export async function deleteCourse(id) {
+async function deleteCourse(id) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -118,3 +118,5 @@ export async function deleteCourse(id) {
 
   if (error) throw new Error(`Failed to delete course: ${error.message}`)
 }
+
+export { deleteCourse }

@@ -7,6 +7,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import ActionTile from '../components/ActionTile'
 import { Icon } from '../components/Icons'
 import { notesGet, notesSetRaw } from '../data/liveTranscription.repository'
+import { fetchLessonAssets } from '../data/lessonAssets.repository'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 function isValidUuid(str) {
@@ -16,12 +17,6 @@ import './screens.css'
 
 const STORAGE_KEY_PREFIX = 'lesson-note-'
 const SAVE_DEBOUNCE_MS = 800
-
-const MOCK_ASSETS = [
-  { id: '1', title: 'Cell diagram.pdf', type: 'pdf', size: '240 KB' },
-  { id: '2', title: 'Notes export', type: 'doc', size: '12 KB' },
-  { id: '3', title: 'Slide deck', type: 'file', size: '1.2 MB' },
-]
 
 function getStoredNote(lessonId) {
   try {
@@ -45,6 +40,8 @@ export default function LessonHubScreen() {
 
   const [noteBody, setNoteBody] = useState('')
   const [notesLoading, setNotesLoading] = useState(true)
+  const [assets, setAssets] = useState([])
+  const [assetsLoading, setAssetsLoading] = useState(true)
   const saveTimeoutRef = useRef(null)
 
   useEffect(() => {
@@ -66,6 +63,24 @@ export default function LessonHubScreen() {
       })
       .catch(() => setNoteBody(''))
       .finally(() => setNotesLoading(false))
+  }, [lessonId])
+
+  useEffect(() => {
+    if (!lessonId) {
+      setAssets([])
+      setAssetsLoading(false)
+      return
+    }
+    if (!isValidUuid(lessonId)) {
+      setAssets([])
+      setAssetsLoading(false)
+      return
+    }
+    setAssetsLoading(true)
+    fetchLessonAssets(lessonId)
+      .then(setAssets)
+      .catch(() => setAssets([]))
+      .finally(() => setAssetsLoading(false))
   }, [lessonId])
 
   const saveNotes = useCallback(
@@ -127,13 +142,15 @@ export default function LessonHubScreen() {
             </div>
           </section>
 
-          {/* ASSETS – grid/list (above actions) */}
+          {/* ASSETS – grid/list (above actions), synced with Supabase */}
           <section className="so-lesson-hub-assets-section">
             <h2 className="so-lesson-hub-assets-label">ASSETS</h2>
-            {MOCK_ASSETS.length > 0 ? (
+            {assetsLoading ? (
+              <p className="so-lesson-hub-assets-empty-text">Loading assets…</p>
+            ) : assets.length > 0 ? (
               <>
                 <div className="so-lesson-hub-assets-grid">
-                  {MOCK_ASSETS.slice(0, 6).map((asset) => (
+                  {assets.slice(0, 6).map((asset) => (
                     <button
                       key={asset.id}
                       type="button"

@@ -255,6 +255,7 @@ serve(async (req: Request) => {
     // -------------------------------------------------------------------------
 
     let courseMaterials: CourseMaterial[] = [];
+    const imageParts: Array<{ inlineData: { mimeType: string; data: string } }> = [];
 
     // Get lesson/course context from conversation
     const { data: conversationContext } = await supabase
@@ -333,6 +334,71 @@ serve(async (req: Request) => {
         console.log(`[${requestId}] Fetched lesson summary`);
       }
 
+      // 4. Fetch lesson_assets (uploaded files) – text and images for tutor context
+      const { data: assets } = await supabase
+        .from("lesson_assets")
+        .select("id, kind, storage_bucket, storage_path, mime_type")
+        .eq("lesson_id", contextLessonId)
+        .eq("user_id", user.id)
+        .not("storage_path", "is", null);
+
+      if (assets && assets.length > 0) {
+        for (const asset of assets) {
+          const bucket = asset.storage_bucket || "lesson-assets";
+          const { data: fileData, error: downloadError } = await supabase.storage
+            .from(bucket)
+            .download(asset.storage_path);
+
+          if (downloadError || !fileData) {
+            console.warn(`[${requestId}] Could not download asset ${asset.id}:`, downloadError?.message);
+            continue;
+          }
+
+          const mime = (asset.mime_type || "").toLowerCase();
+          const kind = (asset.kind || "").toLowerCase();
+
+          // Text assets: add to course materials
+          if (
+            mime === "text/plain" ||
+            mime === "application/json" ||
+            kind === "notes" ||
+            (kind === "other" && mime.startsWith("text/"))
+          ) {
+            try {
+              const textContent = await fileData.text();
+              const filename = asset.storage_path?.split("/").pop() || "asset";
+              courseMaterials.push({
+                id: `asset-${asset.id}`,
+                title: `Uploaded file: ${filename}`,
+                type: "asset",
+                text_content: textContent.substring(0, 3000),
+              });
+              console.log(`[${requestId}] Loaded text asset: ${filename}`);
+            } catch {
+              console.warn(`[${requestId}] Failed to read text asset ${asset.id}`);
+            }
+            continue;
+          }
+
+          // Image assets: collected and passed to Gemini below as inlineData (max 5 to stay within token limits)
+          if (
+            (kind === "image" || mime.startsWith("image/")) &&
+            imageParts.length < 5
+          ) {
+            const arr = new Uint8Array(await fileData.arrayBuffer());
+            let binary = "";
+            const chunk = 8192;
+            for (let i = 0; i < arr.length; i += chunk) {
+              binary += String.fromCharCode(...arr.subarray(i, i + chunk));
+            }
+            const base64 = btoa(binary);
+            const safeMime = mime || "image/png";
+            imageParts.push({ inlineData: { mimeType: safeMime, data: base64 } });
+            console.log(`[${requestId}] Loaded image asset for Gemini: ${asset.storage_path}`);
+          }
+        }
+      }
+
       console.log(`[${requestId}] Total materials fetched: ${courseMaterials.length}`);
     }
 
@@ -342,7 +408,7 @@ serve(async (req: Request) => {
 
     // Build context from course materials
     let contextSection = "";
-    if (courseMaterials.length > 0) {
+    if (courseMaterials.length > 0 || imageParts.length > 0) {
       contextSection = "\n\n## Available Course Materials:\n\n";
       for (const material of courseMaterials) {
         // Truncate each material to 1500 chars to avoid token overflow
@@ -354,8 +420,17 @@ serve(async (req: Request) => {
         contextSection += `ID: ${material.id}\n`;
         contextSection += `${truncatedContent}\n\n`;
       }
+      if (imageParts.length > 0) {
+        contextSection += `\nThe student has also attached ${imageParts.length} image(s) below. Use them to answer questions when relevant.\n\n`;
+      }
     } else {
-      contextSection = "\n\n## Note:\nNo specific course materials are available for this conversation. Answer from general knowledge.\n\n";
+      const assetNote =
+        imageParts.length > 0
+          ? `\n\n## Attached images:\nThe student has provided ${imageParts.length} image(s) as course materials. Use them to answer questions when relevant.\n\n`
+          : "";
+      contextSection =
+        "\n\n## Note:\nNo specific course materials are available for this conversation. Answer from general knowledge." +
+        assetNote;
     }
 
     // Build conversation history (exclude the current message which is already at the end)
@@ -392,11 +467,14 @@ Please provide a helpful, educational response following the guidelines above.`;
     }
 
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
-    console.log(`[${requestId}] Calling Gemini...`);
+    console.log(`[${requestId}] Calling Gemini... (${imageParts.length} image(s))`);
 
-    const result = await model.generateContent(fullPrompt);
+    const result =
+      imageParts.length > 0
+        ? await model.generateContent([fullPrompt, ...imageParts])
+        : await model.generateContent(fullPrompt);
     const response = await result.response;
     const assistantMessage = response.text();
 
@@ -437,7 +515,7 @@ Please provide a helpful, educational response following the guidelines above.`;
         user_id: user.id,
         conversation_id: activeConversationId,
         feature: "tutor_chat",
-        model: "gemini-2.0-flash",
+        model: "gemini-3-flash-preview",
         input_tokens: inputTokens,
         output_tokens: outputTokens,
       });

@@ -6,8 +6,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import ActionTile from '../components/ActionTile'
 import { Icon } from '../components/Icons'
-import { isValidUuid } from '../utils/uuid'
 import { notesGet, notesSetRaw } from '../data/liveTranscription.repository'
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+function isValidUuid(str) {
+  return typeof str === 'string' && UUID_REGEX.test(str)
+}
 import './screens.css'
 
 const STORAGE_KEY_PREFIX = 'lesson-note-'

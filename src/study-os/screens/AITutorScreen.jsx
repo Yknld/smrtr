@@ -5,8 +5,12 @@ import { useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Icon } from '../components/Icons'
 import { supabase } from '../config/supabase'
-import { isValidUuid } from '../utils/uuid'
 import './screens.css'
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+function isValidUuid(str) {
+  return typeof str === 'string' && UUID_REGEX.test(str)
+}
 
 const MAX_MESSAGE_LENGTH = 2000
 

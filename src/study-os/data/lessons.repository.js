@@ -2,7 +2,11 @@
  * Lessons – Supabase. Mirror: study-os-mobile/data/lessons.repository.ts
  */
 import { supabase } from '../config/supabase'
-import { isValidUuid } from '../utils/uuid'
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+function isValidUuid(str) {
+  return typeof str === 'string' && UUID_REGEX.test(str)
+}
 
 const DEMO_ID_MSG = 'This item is from demo data. Create a course and lesson in the app to use this feature.'
 
@@ -125,6 +129,24 @@ export async function fetchLessonById(lessonId) {
     hasPodcast: assets.some((a) => a.kind === 'audio'),
     hasVideo: assets.some((a) => a.kind === 'video'),
   }
+}
+
+/**
+ * Delete a lesson. Throws if not authenticated or not found.
+ */
+export async function deleteLesson(lessonId) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+
+  const { error } = await supabase
+    .from('lessons')
+    .delete()
+    .eq('id', lessonId)
+    .eq('user_id', user.id)
+
+  if (error) throw new Error(`Failed to delete lesson: ${error.message}`)
 }
 
 /**

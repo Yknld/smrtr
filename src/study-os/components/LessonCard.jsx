@@ -58,10 +58,10 @@ export default function LessonCard({ lesson, onPress, onLongPress, onDelete }) {
           <p className="so-lesson-subtitle">Last opened {formatLastOpened(lesson.lastOpenedAt)}</p>
           {hasOutputs && (
             <div className="so-lesson-output-icons">
-              {lesson.hasSummary && <span className="so-lesson-output-icon" aria-hidden><Icon name="fileText" size={14} /></span>}
-              {lesson.hasFlashcards && <span className="so-lesson-output-icon" aria-hidden><Icon name="layers" size={14} /></span>}
-              {lesson.hasQuiz && <span className="so-lesson-output-icon" aria-hidden><Icon name="help" size={14} /></span>}
-              {lesson.hasVideo && <span className="so-lesson-output-icon" aria-hidden><Icon name="video" size={14} /></span>}
+              {lesson.hasSummary && <span className="so-lesson-output-icon" aria-hidden><Icon name="fileText" size={18} /></span>}
+              {lesson.hasFlashcards && <span className="so-lesson-output-icon" aria-hidden><Icon name="layers" size={18} /></span>}
+              {lesson.hasQuiz && <span className="so-lesson-output-icon" aria-hidden><Icon name="help" size={18} /></span>}
+              {lesson.hasVideo && <span className="so-lesson-output-icon" aria-hidden><Icon name="video" size={18} /></span>}
             </div>
           )}
         </div>

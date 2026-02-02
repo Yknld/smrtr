@@ -31,7 +31,7 @@ export default function LessonCard({ lesson, onPress, onLongPress, onDelete }) {
   const handleDeleteClick = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    onDelete?.(lesson)
+    if (typeof onDelete === 'function') onDelete(lesson)
   }
 
   return (
@@ -39,7 +39,7 @@ export default function LessonCard({ lesson, onPress, onLongPress, onDelete }) {
       <div
         className="so-lesson-card-main"
         onClick={handleMainClick}
-        onContextMenu={(e) => { e.preventDefault(); onLongPress?.(lesson) }}
+        onContextMenu={(e) => { e.preventDefault(); if (typeof onLongPress === 'function') onLongPress(lesson) }}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMainClick() } }}

@@ -192,7 +192,7 @@ serve(async (req: Request) => {
       notes = newNotes;
     }
 
-    const currentSeq = notes.last_committed_seq;
+    const currentSeq = notes.last_committed_seq ?? 0;
     const currentText = notes.notes_raw_text || "";
 
     console.log(`📖 Current notes: ${currentText.length} chars, last_committed_seq: ${currentSeq}`);

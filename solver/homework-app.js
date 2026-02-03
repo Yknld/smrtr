@@ -4346,8 +4346,8 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                     }
                 };
 
-                // Use streaming endpoint
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?key=${this.apiKey}`;
+                // Use streaming endpoint; alt=sse returns Server-Sent Events (data: {...}\n)
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?key=${this.apiKey}&alt=sse`;
                 
                 return fetch(url, {
                     method: 'POST',
@@ -4393,9 +4393,14 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                             
                             const trimmedLine = line.trim();
                             if (!trimmedLine) continue;
-                            
+                            // SSE format: "data: {...}" or "data: [DONE]" ; NDJSON: raw {...}
+                            let jsonStr = trimmedLine;
+                            if (jsonStr.startsWith('data:')) {
+                                jsonStr = jsonStr.slice(5).trim();
+                                if (jsonStr === '[DONE]' || jsonStr === '') continue;
+                            }
                             try {
-                                const json = JSON.parse(trimmedLine);
+                                const json = JSON.parse(jsonStr);
                                 
                                 // Handle streaming candidates
                                 if (json.candidates && json.candidates[0]) {
@@ -4434,7 +4439,13 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                     // Process any remaining buffer (last line without newline)
                     if (buffer.trim()) {
                         try {
-                            const json = JSON.parse(buffer.trim());
+                            let rest = buffer.trim();
+                            if (rest.startsWith('data:')) {
+                                rest = rest.slice(5).trim();
+                                if (rest === '[DONE]' || rest === '') rest = null;
+                            }
+                            if (!rest) { /* skip */ } else {
+                            const json = JSON.parse(rest);
                             if (json.candidates && json.candidates[0]) {
                                 const candidate = json.candidates[0];
                                 if (candidate.content && candidate.content.parts) {
@@ -4449,6 +4460,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                             }
                             if (json.error) {
                                 throw new Error(json.error.message || 'API error');
+                            }
                             }
                         } catch (e) {
                             if (e.message && e.message.includes('API error')) {
@@ -4812,6 +4824,11 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             // Use contextMessage for API calls
             const messageToSend = contextMessage;
 
+            // If we have key but no live client, try connecting once (e.g. key arrived via postMessage after load)
+            if (!liveClient && getGeminiApiKey()) {
+                await connectLiveChat();
+            }
+
             // Try live streaming first
             if (liveClient && liveClient.isConnected) {
                 try {
@@ -4838,9 +4855,10 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                 }
             }
 
-            // Fallback to standard API (or use if live client not available)
-            if (!GEMINI_API_KEY) {
-                addMessage('Please set your Gemini API key.', false);
+            // Fallback to standard API (or use if live client not available) – use getGeminiApiKey() so postMessage-injected key is used
+            const apiKey = getGeminiApiKey();
+            if (!apiKey) {
+                addMessage('Please set your Gemini API key (in host app env VITE_GEMINI_API_KEY or meta tag).', false);
                 chatbotSend.disabled = false;
                 return;
             }
@@ -4855,7 +4873,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
 
             try {
-                const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+                const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: conversationHistory })
@@ -4922,6 +4940,16 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
 
         // Initialize status
         updateChatbotStatus('offline', 'Offline');
+
+        // When host injects key via postMessage, update status and auto-connect if panel is open
+        window.addEventListener('gemini-api-key-set', function () {
+            if (getGeminiApiKey()) {
+                updateChatbotStatus('offline', 'Ready');
+                if (chatbotPanel && chatbotPanel.classList.contains('open') && !liveClient) {
+                    connectLiveChat();
+                }
+            }
+        });
 
         // Text Selection - Ask Gemini Feature (popup only when user selects text on the question)
         const askGeminiTooltip = document.createElement('div');

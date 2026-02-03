@@ -135,7 +135,9 @@ export default function LiveScreen() {
       setRecording(true)
       if (lessonId && studySessionId) {
         commitIntervalRef.current = setInterval(() => {
-          notesCommit(lessonId, studySessionId).catch(() => {})
+          notesCommit(lessonId, studySessionId)
+            .then(() => loadNotes())
+            .catch(() => {})
         }, 5000)
       }
     } catch (e) {

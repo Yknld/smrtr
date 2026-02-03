@@ -116,7 +116,10 @@
                     window.__SUPABASE_TOKEN__ = d.token;
                     window.__SUPABASE_URL__ = (d.url || '').replace(/\/$/, '');
                     if (d.lessonId) window.__LESSON_ID__ = d.lessonId;
-                    if (typeof d.geminiApiKey === 'string' && d.geminiApiKey.trim()) window.__GEMINI_API_KEY__ = d.geminiApiKey.trim();
+                    if (typeof d.geminiApiKey === 'string' && d.geminiApiKey.trim()) {
+                        window.__GEMINI_API_KEY__ = d.geminiApiKey.trim();
+                        try { window.dispatchEvent(new Event('gemini-api-key-set')); } catch (_) {}
+                    }
                     doLoad();
                 }
             });

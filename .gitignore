@@ -62,7 +62,9 @@ dist-ssr
 *.sln
 *.sw?
 
-# Secrets
+# Secrets and env (do not commit API keys)
+.env
+.env.local
 .secrets/
 
 # Archived / local-only (clean repo; keep gar/ and AppIcons out of GitHub)

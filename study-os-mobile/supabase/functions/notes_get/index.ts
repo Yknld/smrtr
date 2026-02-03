@@ -146,6 +146,8 @@ serve(async (req: Request) => {
       .select("lesson_id, notes_raw_text, notes_final_text, last_committed_seq, updated_at")
       .eq("lesson_id", lessonId)
       .eq("type", "notes")
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (notesError) {

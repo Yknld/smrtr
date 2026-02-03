@@ -166,6 +166,18 @@ export async function generatePodcastScript(episodeId) {
 }
 
 /**
+ * Regenerate podcast for a lesson: create a new episode and kick off script + audio.
+ * @param {string} lessonId
+ * @returns {Promise<{ episodeId: string }>}
+ */
+export async function regeneratePodcast(lessonId) {
+  const { episodeId } = await createPodcastEpisode(lessonId)
+  await generatePodcastScript(episodeId)
+  generatePodcastAudio(episodeId).catch(() => {})
+  return { episodeId }
+}
+
+/**
  * Generate podcast audio (Edge Function).
  * @param {string} episodeId
  * @returns {Promise<{ episodeId: string, processed: number, failed: number, status: string }>}
@@ -223,6 +235,24 @@ export async function fetchPodcastEpisode(lessonId) {
     createdAt: new Date(data.created_at),
     updatedAt: new Date(data.updated_at),
   }
+}
+
+/**
+ * Count segments with tts_status = 'ready' for an episode (for voicing progress).
+ * @param {string} episodeId
+ * @returns {Promise<number>}
+ */
+export async function fetchPodcastSegmentReadyCount(episodeId) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return 0
+  const { count, error } = await supabase
+    .from('podcast_segments')
+    .select('id', { count: 'exact', head: true })
+    .eq('episode_id', episodeId)
+    .eq('user_id', user.id)
+    .eq('tts_status', 'ready')
+  if (error) return 0
+  return count ?? 0
 }
 
 /**

@@ -4589,9 +4589,14 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             openModuleModal(stepIndex);
         }
         
-        // Gemini Chatbot with Live Streaming
-        const geminiApiKeyMeta = document.querySelector('meta[name="gemini-api-key"]');
-        const GEMINI_API_KEY = geminiApiKeyMeta ? geminiApiKeyMeta.getAttribute('content') : '';
+        // Gemini Chatbot with Live Streaming – key from postMessage (window.__GEMINI_API_KEY__) or meta tag
+        function getGeminiApiKey() {
+            const fromWindow = typeof window.__GEMINI_API_KEY__ === 'string' ? window.__GEMINI_API_KEY__.trim() : '';
+            if (fromWindow) return fromWindow;
+            const meta = document.querySelector('meta[name="gemini-api-key"]');
+            const fromMeta = meta ? (meta.getAttribute('content') || '').trim() : '';
+            return fromMeta;
+        }
         const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
 
         const chatbotButton = document.getElementById('chatbot-button');
@@ -4639,7 +4644,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             chatbotPanel.classList.toggle('open');
             
             // Auto-connect when panel opens (if not already connected)
-            if (chatbotPanel.classList.contains('open') && !liveClient && GEMINI_API_KEY) {
+            if (chatbotPanel.classList.contains('open') && !liveClient && getGeminiApiKey()) {
                 await connectLiveChat();
             }
         });
@@ -4650,8 +4655,9 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
 
         // Connect to live streaming
         async function connectLiveChat() {
-            if (!GEMINI_API_KEY) {
-                addMessage('Please set your Gemini API key in the meta tag.', false);
+            const apiKey = getGeminiApiKey();
+            if (!apiKey) {
+                addMessage('Please set your Gemini API key (meta tag or pass via postMessage from the host app).', false);
                 return;
             }
 
@@ -4662,7 +4668,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             updateChatbotStatus('connecting', 'Connecting...');
 
             try {
-                liveClient = new GeminiLiveClient({ apiKey: GEMINI_API_KEY });
+                liveClient = new GeminiLiveClient({ apiKey: apiKey });
                 
                 // Setup streaming handlers
                 liveClient.onDelta((delta) => {

@@ -215,6 +215,27 @@ export async function fetchCoursePodcasts(courseId: string): Promise<LessonPodca
 }
 
 /**
+ * Delete a podcast episode (and its segments via CASCADE). User must own the episode.
+ */
+export async function deletePodcastEpisode(episodeId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  const { error } = await supabase
+    .from('podcast_episodes')
+    .delete()
+    .eq('id', episodeId)
+    .eq('user_id', user.id);
+
+  if (error) {
+    throw new Error(`Failed to delete podcast: ${error.message}`);
+  }
+}
+
+/**
  * Fetch all podcasts across all courses
  */
 export async function fetchAllPodcasts(): Promise<PodcastAsset[]> {

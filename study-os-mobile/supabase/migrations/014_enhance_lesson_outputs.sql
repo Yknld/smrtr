@@ -63,7 +63,7 @@ ON lesson_outputs(lesson_id, type, version DESC);
 
 COMMENT ON COLUMN lesson_outputs.version IS 'Version number, increments on regeneration';
 COMMENT ON COLUMN lesson_outputs.source_hash IS 'Hash of source content (notes/transcript/assets) for cache consistency';
-COMMENT ON COLUMN lesson_outputs.model IS 'AI model used to generate output (e.g., gemini-2.0-flash)';
+COMMENT ON COLUMN lesson_outputs.model IS 'AI model used to generate output (e.g., gemini-3-flash-preview)';
 
 -- =============================================================================
 -- FUNCTION: Auto-increment version on regeneration

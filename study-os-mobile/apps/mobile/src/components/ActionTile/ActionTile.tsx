@@ -10,6 +10,7 @@ interface ActionTileProps {
   badge?: 'Generate' | 'Generating' | 'Generated' | 'Open';
   disabled?: boolean;
   onPress: () => void;
+  onReset?: () => void;
 }
 
 export const ActionTile: React.FC<ActionTileProps> = ({
@@ -19,6 +20,7 @@ export const ActionTile: React.FC<ActionTileProps> = ({
   badge,
   disabled,
   onPress,
+  onReset,
 }) => {
   // Determine badge style based on state
   const getBadgeStyle = () => {
@@ -39,42 +41,62 @@ export const ActionTile: React.FC<ActionTileProps> = ({
     return styles.badgeText;
   };
 
+  const showReset = badge === 'Generating' && onReset;
+
   return (
-    <TouchableOpacity
-      style={[styles.tile, disabled && styles.tileDisabled]}
-      onPress={onPress}
-      disabled={disabled}
-      activeOpacity={0.7}
-    >
-      {badge && (
-        <View style={getBadgeStyle()}>
-          <Text style={getBadgeTextStyle()}>{badge}</Text>
-        </View>
-      )}
-      <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <Ionicons
-            name={icon}
-            size={24}
-            color={disabled ? colors.textTertiary : colors.textPrimary}
-          />
-        </View>
-        <View style={styles.textContainer}>
-          <Text style={[styles.label, disabled && styles.labelDisabled]} numberOfLines={2}>
-          {label}
-        </Text>
-          {subtitle && (
-            <Text style={styles.subtitle} numberOfLines={2}>
-              {subtitle}
+    <View style={styles.wrap}>
+      <TouchableOpacity
+        style={[styles.tile, disabled && styles.tileDisabled]}
+        onPress={onPress}
+        disabled={disabled}
+        activeOpacity={0.7}
+      >
+        {badge && (
+          <View style={getBadgeStyle()}>
+            <Text style={getBadgeTextStyle()}>{badge}</Text>
+          </View>
+        )}
+        <View style={styles.content}>
+          <View style={styles.iconContainer}>
+            <Ionicons
+              name={icon}
+              size={24}
+              color={disabled ? colors.textTertiary : colors.textPrimary}
+            />
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={[styles.label, disabled && styles.labelDisabled]} numberOfLines={2}>
+              {label}
             </Text>
-          )}
+            {subtitle && (
+              <Text style={styles.subtitle} numberOfLines={2}>
+                {subtitle}
+              </Text>
+            )}
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+      {showReset && (
+        <TouchableOpacity
+          style={styles.resetButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            onReset();
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.resetText}>Reset</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    position: 'relative',
+  },
   tile: {
     backgroundColor: colors.surfaceElevated,
     borderRadius: borderRadius.md,
@@ -149,5 +171,18 @@ const styles = StyleSheet.create({
     lineHeight: 13,
     textAlign: 'center',
     marginTop: 2,
+  },
+  resetButton: {
+    position: 'absolute',
+    bottom: spacing.xs,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  resetText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: colors.textTertiary,
   },
 });

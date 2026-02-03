@@ -76,7 +76,7 @@ Complete rewrite with:
   "cached": true/false,
   "source_hash": "abc123...",
   "version": 1,
-  "model": "gemini-2.0-flash-exp",
+  "model": "gemini-3-flash-preview",
   "content_json": {
     "deck_title": "...",
     "cards": [...],

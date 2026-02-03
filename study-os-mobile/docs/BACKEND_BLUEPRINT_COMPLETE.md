@@ -59,7 +59,7 @@ Generates consistent SHA-256 hash from:
   "type": "flashcards",
   "status": "ready",
   "source_hash": "a40c86d9c1fd4844...",
-  "model": "gemini-2.0-flash-exp",
+  "model": "gemini-3-flash-preview",
   "version": 1,
   "content_json": {
     "cards": [
@@ -74,7 +74,7 @@ Generates consistent SHA-256 hash from:
     "metadata": {
       "total_cards": 10,
       "generated_at": "2026-01-12T01:45:18Z",
-      "model": "gemini-2.0-flash-exp"
+      "model": "gemini-3-flash-preview"
     }
   }
 }
@@ -109,7 +109,7 @@ Generates consistent SHA-256 hash from:
   "type": "quiz",
   "status": "ready",
   "source_hash": "a40c86d9c1fd4844...",
-  "model": "gemini-2.0-flash-exp",
+  "model": "gemini-3-flash-preview",
   "version": 1,
   "content_json": {
     "questions": [
@@ -125,7 +125,7 @@ Generates consistent SHA-256 hash from:
     "metadata": {
       "total_questions": 5,
       "generated_at": "2026-01-12T01:45:18Z",
-      "model": "gemini-2.0-flash-exp"
+      "model": "gemini-3-flash-preview"
     }
   }
 }
@@ -156,7 +156,7 @@ Generates consistent SHA-256 hash from:
   "type": "podcast_outline",
   "status": "ready",
   "source_hash": "a40c86d9c1fd4844...",
-  "model": "gemini-2.0-flash-exp",
+  "model": "gemini-3-flash-preview",
   "version": 1,
   "content_json": {
     "title": "Understanding...",
@@ -186,7 +186,7 @@ Generates consistent SHA-256 hash from:
     "metadata": {
       "total_duration_seconds": 600,
       "generated_at": "2026-01-12T01:45:18Z",
-      "model": "gemini-2.0-flash-exp"
+      "model": "gemini-3-flash-preview"
     }
   }
 }

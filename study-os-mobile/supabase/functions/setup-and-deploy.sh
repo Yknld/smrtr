@@ -10,8 +10,8 @@ echo "🔧 Setting up Supabase Edge Functions..."
 echo ""
 
 # Project details
-PROJECT_REF="euxfugfzmpsemkjpcpuz"
-GEMINI_KEY="AIzaSyDVoAIPakAXm0wYkmuTM-AlFiufWzo93BI"
+PROJECT_REF="${SUPABASE_PROJECT_REF:-euxfugfzmpsemkjpcpuz}"
+GEMINI_KEY="${GEMINI_API_KEY:?Set GEMINI_API_KEY in env (e.g. export GEMINI_API_KEY=your_key)}"
 
 # Go to project root
 cd "$(dirname "$0")/../.."

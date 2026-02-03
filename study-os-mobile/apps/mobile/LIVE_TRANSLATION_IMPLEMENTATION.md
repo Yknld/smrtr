@@ -208,7 +208,7 @@ Response:
 
 ### Direct Gemini API (Fallback)
 ```typescript
-POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent
+POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent
 
 Query params:
   key: {GEMINI_API_KEY}

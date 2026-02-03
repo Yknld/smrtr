@@ -44,7 +44,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "gemini-2.0-flash-exp";
+const MODEL = "gemini-3-flash-preview";
 const MAX_INPUT_CHARS = 12000;
 const MIN_CARDS = 10;
 const MAX_CARDS = 25;
@@ -302,6 +302,8 @@ LESSON TITLE: ${lesson.title}
 
 CONTENT:
 ${contentText}
+
+Base your output ONLY on the lesson content above. Do not mention any app, platform, or product.
 
 Create exactly ${count} flashcards covering the key concepts from this lesson.
 

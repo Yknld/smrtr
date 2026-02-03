@@ -845,26 +845,64 @@
 .so-lesson-hub-notes-section {
   margin-bottom: 0;
 }
+.so-lesson-hub-notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
 .so-lesson-hub-notes-label {
   font-size: 10px;
   font-weight: 600;
   color: #737373;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  margin: 0 0 12px 0;
+  margin: 0;
 }
-/* Main note – doc-style (Google Doc / Word) */
+.so-lesson-hub-notes-sync-btn {
+  font-size: 12px;
+  color: #737373;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.so-lesson-hub-notes-sync-btn:hover:not(:disabled) {
+  color: #a3a3a3;
+}
+.so-lesson-hub-notes-sync-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.so-lesson-hub-notes-sync-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.so-lesson-hub-notes-sync-err {
+  font-size: 11px;
+  color: #f87171;
+  margin: 0;
+  max-width: 260px;
+  text-align: right;
+}
+/* Main note – doc-style, fixed height, scroll inside. */
 .so-lesson-hub-notes-doc {
   background-color: #1A1A1A;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  min-height: 280px;
+  min-height: 200px;
+  height: 240px;
   overflow: hidden;
 }
 .so-lesson-hub-notes-editor {
   display: block;
   width: 100%;
-  min-height: 260px;
+  height: 100%;
+  min-height: 180px;
   padding: 24px 28px 32px;
   box-sizing: border-box;
   font-family: inherit;
@@ -874,9 +912,10 @@
   color: #E5E5E5;
   background: transparent;
   border: none;
-  resize: vertical;
+  resize: none;
   outline: none;
   caret-color: #E5E5E5;
+  overflow-y: auto;
 }
 .so-lesson-hub-notes-editor::placeholder {
   color: #525252;
@@ -897,11 +936,32 @@
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 24px;
 }
+.so-lesson-hub-pyramid {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+}
+.so-lesson-hub-pyramid-row {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 16px;
+}
+.so-lesson-hub-pyramid-row .so-lesson-hub-grid-item {
+  flex: 0 0 160px;
+  max-width: 160px;
+}
 .so-lesson-hub-grid-item {
   min-width: 0;
 }
 
 /* ActionTile – professional card (single focus, subtle border) */
+.so-action-tile-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 0;
+}
 .so-action-tile {
   position: relative;
   background-color: #1A1A1A;
@@ -919,6 +979,44 @@
   min-height: 0;
   box-sizing: border-box;
   transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.so-action-tile-regenerate {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 500;
+  color: #737373;
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.so-action-tile-regenerate:hover {
+  color: #A3A3A3;
+}
+.so-action-tile-regenerate:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.so-action-tile-reset {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 500;
+  color: #737373;
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.so-action-tile-reset:hover {
+  color: #A3A3A3;
 }
 .so-action-tile:hover {
   background-color: #222;
@@ -940,6 +1038,11 @@
   background-color: rgba(34, 197, 94, 0.15);
   border: 1px solid rgba(34, 197, 94, 0.4);
   color: #4ADE80;
+}
+.so-action-tile-badge--generating {
+  background-color: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  color: #EAB308;
 }
 .so-action-tile-badge--generate {
   background-color: rgba(255, 255, 255, 0.06);
@@ -1004,6 +1107,7 @@
   cursor: pointer;
   text-align: left;
   min-height: 0;
+  min-width: 0;
   transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 .so-asset-card:hover {
@@ -1023,15 +1127,23 @@
   color: #E5E5E5;
   line-height: 1.35;
   margin: 0;
+  width: 100%;
+  min-width: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 .so-asset-card-meta {
   font-size: 11px;
   color: #737373;
   margin-top: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .so-lesson-hub-assets-empty {
   background-color: #1A1A1A;
@@ -1182,7 +1294,7 @@
 }
 .so-assets-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 16px;
 }
 .so-asset-card-full {
@@ -1196,6 +1308,7 @@
   cursor: pointer;
   text-align: left;
   min-height: 0;
+  min-width: 0;
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 .so-asset-card-full:hover {
@@ -1824,6 +1937,11 @@
 }
 .so-tutor-message--user .so-tutor-message-text { color: #E5E5E5; }
 .so-tutor-typing { font-style: italic; color: #737373; }
+/* KaTeX math wrappers – inherit text color, minimal layout */
+.so-math-inline { display: inline; }
+.so-math-inline .katex { font-size: 1em; }
+.so-math-display { display: block; margin: 0.5em 0; }
+.so-math-display .katex { font-size: 1.1em; }
 .so-tutor-footer {
   flex-shrink: 0;
   padding: 16px 24px 24px;
@@ -1901,6 +2019,20 @@
   line-height: 1.5;
   margin: 0;
   max-width: 360px;
+}
+.so-solver-placeholder-back {
+  margin-top: 24px;
+  padding: 10px 20px;
+  font-size: 14px;
+  color: #A3A3A3;
+  background: #252525;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.so-solver-placeholder-back:hover {
+  color: #D4D4D4;
+  background: #2A2A2A;
 }
 .so-solver-embed-wrap {
   position: relative;

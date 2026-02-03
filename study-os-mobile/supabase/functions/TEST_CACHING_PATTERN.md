@@ -58,7 +58,7 @@ curl -X POST "${SUPABASE_URL}/functions/v1/lesson_generate_flashcards" \
   "cached": false,
   "source_hash": "abc123...",
   "version": 1,
-  "model": "gemini-2.0-flash-exp",
+  "model": "gemini-3-flash-preview",
   "content_json": {
     "deck_title": "...",
     "cards": [
@@ -139,7 +139,7 @@ curl -X POST "${SUPABASE_URL}/functions/v1/lesson_generate_quiz" \
   "cached": false,
   "source_hash": "abc123...",  // SAME as flashcards!
   "version": 1,
-  "model": "gemini-2.0-flash-exp",
+  "model": "gemini-3-flash-preview",
   "content_json": {
     "title": "...",
     "questions": [
@@ -272,9 +272,9 @@ ORDER BY type, version DESC;
 ```
 type         | version | source_hash | status | model
 -------------|---------|-------------|--------|----------------------
-flashcards   | 2       | def456...   | ready  | gemini-2.0-flash-exp
-flashcards   | 1       | abc123...   | ready  | gemini-2.0-flash-exp
-quiz         | 1       | abc123...   | ready  | gemini-2.0-flash-exp
+flashcards   | 2       | def456...   | ready  | gemini-3-flash-preview
+flashcards   | 1       | abc123...   | ready  | gemini-3-flash-preview
+quiz         | 1       | abc123...   | ready  | gemini-3-flash-preview
 ```
 
 **✅ Success Criteria:**

@@ -142,7 +142,7 @@ export class GeminiLiveService {
     // We can optionally send a setup message, but the token constraints will apply
     const setupMessage = {
       setup: {
-        model: this.token?.model || 'models/gemini-2.0-flash-exp',
+        model: this.token?.model || 'models/gemini-3-flash-preview',
       }
     };
 

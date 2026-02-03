@@ -124,7 +124,7 @@ B: "Whether to fire or not. Based on what it's getting from neighbors."
 
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
-| `model` | `gemini-2.0-flash-exp` | Latest Gemini with JSON mode |
+| `model` | `gemini-3-flash-preview` | Latest Gemini with JSON mode |
 | `temperature` | `0.8` | Balanced creativity and consistency |
 | `maxOutputTokens` | `8192` | Full episode generation |
 | `responseMimeType` | `application/json` | Structured output |

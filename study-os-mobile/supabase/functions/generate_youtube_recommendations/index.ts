@@ -34,7 +34,7 @@ import {
   generateSourceHash 
 } from "../shared/sourceHash.ts";
 
-const MODEL = "gemini-2.0-flash-exp";
+const MODEL = "gemini-3-flash-preview";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

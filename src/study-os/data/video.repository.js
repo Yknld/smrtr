@@ -2,10 +2,32 @@
  * Video – fetch signed URL for lesson video, trigger generation.
  * Mirrors study-os-mobile LessonHub handlePlayVideo / handleGenerateVideo.
  */
-import { supabase, SUPABASE_URL } from '../config/supabase'
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/supabase'
 
 const VIDEO_BUCKET = 'lesson-assets'
 const SIGNED_URL_EXPIRY_SEC = 3600
+
+/**
+ * Status for hub tile: 'generate' | 'generating' | 'generated'
+ * @param {string} lessonId
+ * @returns {Promise<'generate'|'generating'|'generated'>}
+ */
+export async function fetchVideoStatus(lessonId) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return 'generate'
+
+  const { data: rows, error } = await supabase
+    .from('lesson_assets')
+    .select('storage_path')
+    .eq('lesson_id', lessonId)
+    .eq('user_id', user.id)
+    .eq('kind', 'video')
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error || !rows || rows.length === 0) return 'generate'
+  return rows[0].storage_path ? 'generated' : 'generating'
+}
 
 /**
  * Fetch the most recent video asset for a lesson and return a signed playback URL.
@@ -45,15 +67,22 @@ export async function fetchVideoForLesson(lessonId) {
  * @returns {Promise<{ video_id: string }>}
  */
 export async function generateVideo(lessonId) {
-  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
+  if (refreshError) throw new Error('Session expired. Please sign out and sign in again.')
   if (!session) throw new Error('User not authenticated')
 
-  const url = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/lesson_generate_video`
+  // In dev, use Vite proxy to avoid CORS (browser → same-origin → proxy → Supabase).
+  const base =
+    typeof import.meta.env.DEV !== 'undefined' && import.meta.env.DEV && typeof window !== 'undefined'
+      ? `${window.location.origin}/supabase-functions`
+      : `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1`
+  const url = `${base}/lesson_generate_video`
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
     },
     body: JSON.stringify({
       lesson_id: lessonId,
@@ -61,10 +90,14 @@ export async function generateVideo(lessonId) {
     }),
   })
 
+  const body = await res.json().catch(() => ({}))
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.message || err.error || 'Failed to generate video')
+    const msg =
+      body?.error?.message ??
+      (typeof body?.error === 'string' ? body.error : null) ??
+      body?.message ??
+      `Failed to generate video (${res.status})`
+    throw new Error(msg)
   }
-  const body = await res.json()
   return { video_id: body.video_id }
 }

@@ -8,10 +8,12 @@ import {
   SafeAreaView,
   StatusBar,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LessonWithOutputs, LessonStatus } from '../../types/lesson';
-import { fetchLessons, createLesson } from '../../data/lessons.repository';
+import { fetchLessons, createLesson, deleteLesson } from '../../data/lessons.repository';
+import { deleteCourse } from '../../data/courses.repository';
 import { colors, spacing } from '../../ui/tokens';
 import { LessonCard } from '../../components/LessonCard/LessonCard';
 import { LoadingState } from '../../components/LoadingState/LoadingState';
@@ -36,6 +38,7 @@ export const CourseDetailScreen: React.FC<CourseDetailScreenProps> = ({ route, n
   const [refreshing, setRefreshing] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [lessonSheetVisible, setLessonSheetVisible] = useState(false);
+  const [selectedLesson, setSelectedLesson] = useState<LessonWithOutputs | null>(null);
 
   // Load lessons
   const loadLessons = useCallback(async () => {
@@ -68,10 +71,57 @@ export const CourseDetailScreen: React.FC<CourseDetailScreenProps> = ({ route, n
     });
   };
 
-  // Handle lesson long press
+  // Handle lesson long press: show sheet with Delete Lesson
   const handleLessonLongPress = (lesson: LessonWithOutputs) => {
-    // TODO: Show rename/delete options
-    console.log('Lesson long pressed:', lesson.title);
+    setSelectedLesson(lesson);
+  };
+
+  const handleDeleteLessonFromSheet = () => {
+    const lesson = selectedLesson;
+    setSelectedLesson(null);
+    if (!lesson) return;
+    Alert.alert(
+      'Delete Lesson',
+      `Delete "${lesson.title}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteLesson(lesson.id);
+              await loadLessons();
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete lesson');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteCourse = () => {
+    setMenuVisible(false);
+    Alert.alert(
+      'Delete Course',
+      `Delete "${courseTitle}" and all its lessons? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCourse(courseId);
+              navigation.goBack();
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete course');
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Overflow menu actions
@@ -83,6 +133,10 @@ export const CourseDetailScreen: React.FC<CourseDetailScreenProps> = ({ route, n
     {
       label: 'Archive Course',
       onPress: () => console.log('Archive course'),
+    },
+    {
+      label: 'Delete Course',
+      onPress: handleDeleteCourse,
     },
   ];
 
@@ -202,6 +256,19 @@ export const CourseDetailScreen: React.FC<CourseDetailScreenProps> = ({ route, n
           visible={lessonSheetVisible}
           onClose={() => setLessonSheetVisible(false)}
           actions={lessonActions}
+        />
+
+        {/* Lesson options sheet (long-press) */}
+        <BottomSheet
+          visible={!!selectedLesson}
+          onClose={() => setSelectedLesson(null)}
+          title={selectedLesson?.title}
+          actions={[
+            {
+              label: 'Delete Lesson',
+              onPress: handleDeleteLessonFromSheet,
+            },
+          ]}
         />
       </View>
     </SafeAreaView>

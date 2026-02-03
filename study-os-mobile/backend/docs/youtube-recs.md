@@ -275,7 +275,7 @@ supabase secrets set GEMINI_API_KEY=your_key
 
 ### Gemini API
 
-**Model**: `gemini-2.0-flash-exp` (Free during preview)
+**Model**: `gemini-3-flash-preview` (Free during preview)
 
 **Future pricing** (estimated when GA):
 - Input: ~$0.00001 per 1K chars

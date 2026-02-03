@@ -171,7 +171,7 @@ CREATE TABLE lesson_outputs (
 
 ### External Services
 
-- **Google Gemini API**: Uses `gemini-2.0-flash-exp` model for content generation
+- **Google Gemini API**: Uses `gemini-3-flash-preview` model for content generation
 - **Requires**: `GEMINI_API_KEY` environment variable
 
 ### Shared Helpers

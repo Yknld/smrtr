@@ -72,7 +72,7 @@ CREATE TABLE ai_usage (
 
 COMMENT ON TABLE ai_usage IS 'Track AI API usage for analytics and cost monitoring';
 COMMENT ON COLUMN ai_usage.feature IS 'Which feature generated the usage';
-COMMENT ON COLUMN ai_usage.model IS 'AI model used (e.g., gemini-2.0-flash)';
+COMMENT ON COLUMN ai_usage.model IS 'AI model used (e.g., gemini-3-flash-preview)';
 
 -- =============================================================================
 -- INDEXES

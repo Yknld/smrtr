@@ -157,13 +157,20 @@ export async function updateCourse(
 }
 
 /**
- * Delete a course
+ * Delete a course (and its lessons via DB CASCADE). Only the owning user can delete.
  */
 export async function deleteCourse(id: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
   const { error } = await supabase
     .from('courses')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user.id);
 
   if (error) {
     throw new Error(`Failed to delete course: ${error.message}`);

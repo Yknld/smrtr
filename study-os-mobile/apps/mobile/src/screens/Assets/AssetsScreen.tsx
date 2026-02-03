@@ -20,7 +20,7 @@ import { AssetRow } from '../../components/AssetRow/AssetRow';
 import { EmptyState } from '../../components/EmptyState/EmptyState';
 import { BottomSheet, BottomSheetAction } from '../../components/BottomSheet/BottomSheet';
 import { UploadProgress } from '../../components/UploadProgress/UploadProgress';
-import { supabase } from '../../config/supabase';
+import { supabase, SUPABASE_URL } from '../../config/supabase';
 
 interface AssetsScreenProps {
   route: {
@@ -418,17 +418,35 @@ export const AssetsScreen: React.FC<AssetsScreenProps> = ({ route, navigation })
         )
       );
 
-      // Create database record
-      const { error: dbError } = await supabase.from('lesson_assets').insert({
-        lesson_id: lessonId,
-        user_id: user.id,
-        kind,
-        storage_bucket: 'lesson-assets',
-        storage_path: storagePath,
-        mime_type: mimeType,
-      });
+      // Create database record and get id for notes update
+      const { data: insertedAsset, error: dbError } = await supabase
+        .from('lesson_assets')
+        .insert({
+          lesson_id: lessonId,
+          user_id: user.id,
+          kind,
+          storage_bucket: 'lesson-assets',
+          storage_path: storagePath,
+          mime_type: mimeType,
+        })
+        .select('id')
+        .single();
 
       if (dbError) throw dbError;
+
+      // Append this asset to the lesson notes (fire-and-forget)
+      if (insertedAsset?.id) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const url = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/notes_append_from_asset`;
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ lesson_id: lessonId, asset_id: insertedAsset.id }),
+        }).catch((err) => console.warn('notes_append_from_asset:', err?.message));
+      }
 
       // Update to complete
       setUploads((prev) =>

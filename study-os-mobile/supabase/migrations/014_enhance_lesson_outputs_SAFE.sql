@@ -37,7 +37,7 @@ BEGIN
     WHERE table_name = 'lesson_outputs' AND column_name = 'model'
   ) THEN
     ALTER TABLE lesson_outputs ADD COLUMN model text NULL;
-    COMMENT ON COLUMN lesson_outputs.model IS 'AI model used to generate output (e.g., gemini-2.0-flash)';
+    COMMENT ON COLUMN lesson_outputs.model IS 'AI model used to generate output (e.g., gemini-3-flash-preview)';
   END IF;
 END $$;
 

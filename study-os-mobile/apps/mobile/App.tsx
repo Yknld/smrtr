@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -10,12 +10,21 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
+import { useFonts } from 'expo-font';
+import { Ionicons } from '@expo/vector-icons';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/config/supabase';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { colors, spacing } from './src/ui/tokens';
 
+SplashScreen.preventAutoHideAsync();
+
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    ...Ionicons.font,
+  });
+
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('user1@test.com');
@@ -42,9 +51,19 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  const onLayoutRootView = useCallback(async () => {
+    if (fontsLoaded || fontError) {
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.loadingContainer} onLayout={onLayoutRootView}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
@@ -71,7 +90,7 @@ export default function App() {
 
   if (!session) {
     return (
-      <SafeAreaView style={styles.authContainer}>
+      <SafeAreaView style={styles.authContainer} onLayout={onLayoutRootView}>
         <StatusBar barStyle="light-content" />
         <View style={styles.authContent}>
           <Text style={styles.authTitle}>Welcome to Smartr</Text>
@@ -124,7 +143,11 @@ export default function App() {
   );
   }
 
-  return <AppNavigator />;
+  return (
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <AppNavigator />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

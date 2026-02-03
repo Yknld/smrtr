@@ -1,0 +1,112 @@
+# Supabase project config.
+# All Edge Functions have verify_jwt = false so the gateway does not reject requests.
+# Functions that need a user still validate the JWT in code (e.g. for RLS).
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+[inbucket]
+enabled = true
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["https://127.0.0.1:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+# Per-function: disable JWT verification at the gateway (auth handled in-code where needed)
+[functions.gemini_live_token]
+verify_jwt = false
+[functions.gemini_translate]
+verify_jwt = false
+[functions.generate_youtube_recommendations]
+verify_jwt = false
+[functions.interactive_module_get]
+verify_jwt = false
+[functions.lesson_create_from_youtube]
+verify_jwt = false
+[functions.lesson_generate_flashcards]
+verify_jwt = false
+[functions.lesson_generate_interactive]
+verify_jwt = false
+[functions.lesson_generate_interactive_reset]
+verify_jwt = false
+[functions.lesson_generate_quiz]
+verify_jwt = false
+[functions.lesson_generate_summary]
+verify_jwt = false
+[functions.lesson_generate_video]
+verify_jwt = false
+[functions.lesson_video_upload]
+verify_jwt = false
+[functions.lesson_youtube_recs]
+verify_jwt = false
+[functions.lesson_youtube_resource_add]
+verify_jwt = false
+[functions.notes_append_from_asset]
+verify_jwt = false
+[functions.notes_commit_from_segments]
+verify_jwt = false
+[functions.notes_finalize]
+verify_jwt = false
+[functions.notes_get]
+verify_jwt = false
+[functions.podcast_create]
+verify_jwt = false
+[functions.podcast_generate_audio]
+verify_jwt = false
+[functions.podcast_generate_outline]
+verify_jwt = false
+[functions.podcast_generate_script]
+verify_jwt = false
+[functions.podcast_get]
+verify_jwt = false
+[functions.podcast_join_in]
+verify_jwt = false
+[functions.podcast_join_in_acknowledge]
+verify_jwt = false
+[functions.push_token_upsert]
+verify_jwt = false
+[functions.study_plan_upsert]
+verify_jwt = false
+[functions.transcribe_chunk]
+verify_jwt = false
+[functions.transcribe_poll]
+verify_jwt = false
+[functions.transcribe_start]
+verify_jwt = false
+[functions.tutor_chat]
+verify_jwt = false
+[functions.video_poll_github]
+verify_jwt = false
+[functions.test_flashcards_minimal]
+verify_jwt = false
+[functions.test_no_validation]
+verify_jwt = false

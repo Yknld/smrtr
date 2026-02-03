@@ -29,8 +29,25 @@ const corsHeaders = {
 
 const MAX_CONTEXT_CHARS = 8000;
 const RUNPOD_API_BASE = "https://api.runpod.ai/v2";
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-3-flash-preview";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+
+/** Strip UI metadata and separators so only the actual transcript/note body is used for question generation. */
+function stripNoteMetadata(text: string): string {
+  if (!text?.trim()) return text;
+  const lines = text.split("\n");
+  const out: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    if (/^Topic:\s*(Not specified|$)/i.test(t)) continue;
+    if (/^Date:\s*(Not specified|$)/i.test(t)) continue;
+    if (/^Duration:\s*(Not specified|$)/i.test(t)) continue;
+    if (/^---\s*Content from\s+.+\s*---\s*$/i.test(t)) continue;
+    out.push(line);
+  }
+  return out.join("\n").trim();
+}
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -108,28 +125,34 @@ serve(async (req: Request) => {
       );
     }
 
-    // Get lesson context (aligned with video: summary → notes/transcript → title)
+    // Get lesson context: notes first (primary), then summary, then title
     let contextText = "";
-    const { data: summaryOutput } = await supabaseClient
-      .from("lesson_outputs")
-      .select("content_json")
-      .eq("lesson_id", lessonId)
-      .eq("type", "summary")
-      .eq("status", "ready")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (summaryOutput?.content_json?.summary) {
-      contextText = String(summaryOutput.content_json.summary);
-      console.log(`[${requestId}] Using summary (${contextText.length} chars)`);
+    const inputs = await gatherSourceInputs(supabaseClient, lessonId);
+    const hasNotes = !!(inputs.notes_final_text?.trim() || inputs.notes_raw_text?.trim());
+    if (!hasNotes) {
+      console.log(`[${requestId}] No notes in lesson_outputs (type=notes) for this lesson; will use summary or title`);
+    }
+    contextText = getContentText(inputs, MAX_CONTEXT_CHARS);
+    contextText = stripNoteMetadata(contextText);
+    if (contextText?.trim()) {
+      const preview = contextText.trim().slice(0, 200).replace(/\n/g, " ");
+      console.log(`[${requestId}] Using notes/transcript (${contextText.length} chars). Preview: ${preview}...`);
     }
 
-    if (!contextText) {
-      const inputs = await gatherSourceInputs(supabaseClient, lessonId);
-      contextText = getContentText(inputs, MAX_CONTEXT_CHARS);
-      if (contextText) {
-        console.log(`[${requestId}] Using notes/transcript (${contextText.length} chars)`);
+    if (!contextText?.trim()) {
+      const { data: summaryOutput } = await supabaseClient
+        .from("lesson_outputs")
+        .select("content_json")
+        .eq("lesson_id", lessonId)
+        .eq("type", "summary")
+        .eq("status", "ready")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (summaryOutput?.content_json?.summary) {
+        contextText = String(summaryOutput.content_json.summary);
+        console.log(`[${requestId}] Using summary (${contextText.length} chars)`);
       }
     }
 
@@ -156,15 +179,12 @@ serve(async (req: Request) => {
     }
 
     if (contextText.trim()) {
-      const prompt = `You are an expert educator. Given the lesson content below, generate exactly 1 to 3 clear practice QUESTIONS or problems that a student could work through step-by-step. Each item must be a single question or problem statement (e.g. "Calculate...", "Explain why...", "Write code that..."). Do NOT return summaries, descriptions, or "Key concepts include" lists—only actual questions.
+      const prompt = `You are an expert educator. The CONTENT below is the lesson transcript/notes. Generate 1 to 3 specific practice QUESTIONS or problems that a student would answer using this content. Each question must be a concrete question (e.g. "Calculate...", "Explain why...", "What is...") based only on the concepts, formulas, or facts in the notes. Do NOT return meta-questions like "What are the main concepts?"—return actual practice questions.
 
 LESSON TITLE: ${lesson.title || "Untitled"}
 
-CONTENT:
-${contextText.trim()}
-
-Return ONLY a JSON array of 1–3 strings. No other text. Example:
-["What is the time complexity of binary search?", "Implement a function that reverses a string."]`;
+TRANSCRIPT / NOTES:
+${contextText.trim()}`;
 
       try {
         const geminiRes = await fetch(
@@ -175,8 +195,16 @@ Return ONLY a JSON array of 1–3 strings. No other text. Example:
             body: JSON.stringify({
               contents: [{ parts: [{ text: prompt }] }],
               generationConfig: {
-                temperature: 0.5,
+                temperature: 0.4,
                 maxOutputTokens: 1024,
+                responseMimeType: "application/json",
+                responseJsonSchema: {
+                  type: "array",
+                  items: { type: "string" },
+                  minItems: 1,
+                  maxItems: 3,
+                  description: "1 to 3 practice questions derived from the lesson notes",
+                },
               },
             }),
           }
@@ -191,15 +219,19 @@ Return ONLY a JSON array of 1–3 strings. No other text. Example:
             try {
               const parsed = JSON.parse(cleaned);
               if (Array.isArray(parsed)) {
-                problem_texts = parsed
-                  .filter((x): x is string => typeof x === "string")
-                  .map((s) => s.trim())
+                const asStrings = parsed.filter((x): x is string => typeof x === "string").map((s) => s.trim());
+                problem_texts = asStrings
                   .filter((s) => s.length > 15 && !/^(Key concepts|JavaScript is|This (lesson|module)|The (lesson|topic))/i.test(s))
                   .slice(0, 3);
+                if (asStrings.length > 0 && problem_texts.length === 0) {
+                  console.warn(`[${requestId}] Gemini returned ${asStrings.length} items but all were filtered out`);
+                }
               }
             } catch (_) {
-              console.warn(`[${requestId}] Gemini response was not valid JSON`);
+              console.warn(`[${requestId}] Gemini response was not valid JSON (length ${raw?.length ?? 0})`);
             }
+          } else {
+            console.warn(`[${requestId}] Gemini returned no text in response`);
           }
         } else {
           console.warn(`[${requestId}] Gemini API error: ${geminiRes.status}`);
@@ -209,11 +241,19 @@ Return ONLY a JSON array of 1–3 strings. No other text. Example:
       }
     }
 
-    // Only allow a single generic question fallback—never raw summary chunks as "questions"
+    // When Gemini returns no valid questions, use a single fallback (rare if structured output works)
     if (problem_texts.length === 0) {
-      const topic = lesson.title || "this topic";
-      problem_texts = [`Based on the lesson "${topic}", what are the main concepts and how would you explain them?`];
-      console.log(`[${requestId}] Using single fallback question (Gemini unavailable or returned no valid questions)`);
+      const trimmedContext = contextText.trim();
+      const hasRealNotes = trimmedContext.length > 50 && !trimmedContext.startsWith("This lesson is about:");
+      if (hasRealNotes) {
+        const firstLine = trimmedContext.split("\n").find((l) => l.trim().length > 10)?.trim() ?? trimmedContext.slice(0, 100);
+        problem_texts = [`Using the concepts from "${firstLine.replace(/"/g, "'").slice(0, 120)}", write a short practice problem and solve it step by step.`];
+        console.log(`[${requestId}] Using note-based fallback (Gemini returned no valid questions; context had ${trimmedContext.length} chars)`);
+      } else {
+        const topic = lesson.title || "this topic";
+        problem_texts = [`Explain the main ideas of "${topic}" and give one example.`];
+        console.log(`[${requestId}] Using title-only fallback (no notes/summary)`);
+      }
     } else {
       console.log(`[${requestId}] Generated ${problem_texts.length} practice questions from Gemini`);
     }

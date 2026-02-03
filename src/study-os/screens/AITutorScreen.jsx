@@ -4,6 +4,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Icon } from '../components/Icons'
+import { MathText } from '../components/MathText'
 import { supabase } from '../config/supabase'
 import './screens.css'
 
@@ -30,7 +31,7 @@ const ACTION_PROMPTS = {
   podcast: 'Create a podcast-style summary of this lesson',
 }
 
-/** Render text with **bold** as <strong> (matches mobile FormattedMessage). */
+/** Render text with **bold** and $...$ / $$...$$ math (KaTeX). */
 function FormattedMessage({ content, isUser }) {
   const clean = content
     .replace(/^##\s+/gm, '')
@@ -54,9 +55,9 @@ function FormattedMessage({ content, isUser }) {
     <p className="so-tutor-message-text">
       {parts.map((part, i) =>
         part.bold ? (
-          <strong key={i}>{part.text}</strong>
+          <strong key={i}><MathText text={part.text} /></strong>
         ) : (
-          <span key={i}>{part.text}</span>
+          <MathText key={i} text={part.text} />
         )
       )}
     </p>
@@ -187,7 +188,7 @@ export default function AITutorScreen() {
                   </span>
                 )}
                 {msg.role === 'user' ? (
-                  <p className="so-tutor-message-text">{msg.text}</p>
+                  <p className="so-tutor-message-text"><MathText text={msg.text} /></p>
                 ) : (
                   <FormattedMessage content={msg.text} isUser={false} />
                 )}

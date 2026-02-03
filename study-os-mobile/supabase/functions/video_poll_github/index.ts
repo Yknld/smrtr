@@ -2,15 +2,15 @@
 // Edge Function: video_poll_github
 // ============================================================================
 //
-// Purpose: Poll OpenHand conversations and GitHub for completed videos
+// Purpose: Poll OpenHand conversations; get video from artifacts and upload to Supabase.
 //
 // This function:
-// 1. Checks for videos with storage_path = null (generating state)
-// 2. Polls OpenHand to check if conversation is complete
-// 3. If complete, checks GitHub for video artifact
-// 4. Downloads and uploads to Supabase storage
+// 1. Finds lesson_assets with kind=video, storage_path=null, conversation_id set
+// 2. Polls OpenHand for conversation status
+// 3. When complete: gets video from OpenHand artifacts (primary); falls back to GitHub if needed
+// 4. Uploads video to Supabase storage and updates lesson_assets
 //
-// Triggered by: Frequent cron job (every 30-60 seconds recommended)
+// Triggered by: Cron (e.g. every 30–60 seconds)
 // ============================================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -194,44 +194,70 @@ serve(async (req: Request) => {
           continue;
         }
 
-        // Step 4: Conversation is complete! Check GitHub for video
-        console.log(`[${requestId}] ✓ Conversation complete! Checking GitHub...`);
-
-        // Try multiple possible locations
-        const possiblePaths = [
-          `videos/${video.lesson_id}_${video.id}.mp4`,
-          `videos/${video.id}.mp4`,
-          `${video.lesson_id}/${video.id}.mp4`,
-        ];
+        // Step 4: Conversation complete — get video from OpenHand artifacts first (direct to Supabase)
+        console.log(`[${requestId}] ✓ Conversation complete! Checking OpenHand artifacts...`);
 
         let videoBlob: ArrayBuffer | null = null;
-        let successPath: string | null = null;
 
-        for (const path of possiblePaths) {
-          const githubUrl = `https://raw.githubusercontent.com/Yknld/video-artifacts/main/${path}`;
-          
-          console.log(`[${requestId}] Trying: ${githubUrl}`);
-
-          const headers: Record<string, string> = {};
-          if (githubToken) {
-            headers['Authorization'] = `token ${githubToken}`;
+        if (status.artifacts && status.artifacts.length > 0) {
+          const videoArtifact = status.artifacts.find(
+            (a: { type?: string; url?: string; path?: string }) =>
+              (a.type === "file" || a.type === "video" || !a.type) &&
+              (a.path?.includes("video.mp4") || a.path?.includes(".mp4") || a.url?.includes(".mp4") || a.path?.includes("/out/"))
+          );
+          if (videoArtifact?.url) {
+            const artRes = await fetch(videoArtifact.url);
+            if (artRes.ok) {
+              const contentType = artRes.headers.get("content-type");
+              const buf = await artRes.arrayBuffer();
+              const bytes = new Uint8Array(buf);
+              const isMp4 = bytes.length > 12 && String.fromCharCode(...bytes.slice(4, 8)) === "ftyp";
+              if (contentType?.includes("video") || contentType?.includes("mp4") || contentType?.includes("octet-stream") || isMp4 || bytes.length > 100000) {
+                videoBlob = buf;
+                console.log(`[${requestId}] ✓ Got video from OpenHand artifacts (${bytes.length} bytes)`);
+              }
+            }
           }
-
-          const response = await fetch(githubUrl, { headers });
-          
-          if (response.ok) {
-            videoBlob = await response.arrayBuffer();
-            successPath = path;
-            console.log(`[${requestId}] ✓ Found video at: ${path} (${videoBlob.byteLength} bytes)`);
-            break;
-          } else {
-            console.log(`[${requestId}] Not found at: ${path} (${response.status})`);
+          if (!videoBlob) {
+            for (const a of status.artifacts) {
+              if (!a.url) continue;
+              const artRes = await fetch(a.url);
+              if (!artRes.ok) continue;
+              const buf = await artRes.arrayBuffer();
+              const bytes = new Uint8Array(buf);
+              if (bytes.length > 12 && String.fromCharCode(...bytes.slice(4, 8)) === "ftyp") {
+                videoBlob = buf;
+                console.log(`[${requestId}] ✓ Got video from artifact ${a.path} (${bytes.length} bytes)`);
+                break;
+              }
+              if (bytes.length > 100000 && (artRes.headers.get("content-type")?.includes("video") || a.path?.endsWith(".mp4"))) {
+                videoBlob = buf;
+                break;
+              }
+            }
           }
         }
 
-        if (!videoBlob || !successPath) {
-          console.warn(`[${requestId}] Conversation complete but video not in GitHub yet: ${video.id}`);
-          console.warn(`[${requestId}] OpenHand may not have successfully uploaded. Will retry on next poll.`);
+        // Fallback: GitHub (if agent uploaded there)
+        if (!videoBlob && githubToken) {
+          const possiblePaths = [
+            `videos/${video.lesson_id}_${video.id}.mp4`,
+            `videos/${video.id}.mp4`,
+            `${video.lesson_id}/${video.id}.mp4`,
+          ];
+          for (const path of possiblePaths) {
+            const githubUrl = `https://raw.githubusercontent.com/Yknld/video-artifacts/main/${path}`;
+            const response = await fetch(githubUrl, { headers: { Authorization: `token ${githubToken}` } });
+            if (response.ok) {
+              videoBlob = await response.arrayBuffer();
+              console.log(`[${requestId}] ✓ Got video from GitHub: ${path}`);
+              break;
+            }
+          }
+        }
+
+        if (!videoBlob) {
+          console.warn(`[${requestId}] Conversation complete but no video in artifacts or GitHub: ${video.id}. Will retry.`);
           continue;
         }
 

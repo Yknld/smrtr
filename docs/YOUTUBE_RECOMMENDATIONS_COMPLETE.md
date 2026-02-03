@@ -201,7 +201,7 @@ supabase secrets set GEMINI_API_KEY=your_key
 
 ### Gemini API
 
-**Model**: `gemini-2.0-flash-exp`
+**Model**: `gemini-3-flash-preview`
 
 **Current**: Free during preview
 

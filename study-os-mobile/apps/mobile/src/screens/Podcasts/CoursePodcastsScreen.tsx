@@ -8,11 +8,12 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../../ui/tokens';
 import { EmptyState } from '../../components/EmptyState/EmptyState';
-import { LessonPodcast, fetchCoursePodcasts } from '../../data/podcasts.repository';
+import { LessonPodcast, fetchCoursePodcasts, deletePodcastEpisode } from '../../data/podcasts.repository';
 
 interface CoursePodcastsScreenProps {
   route: {
@@ -77,6 +78,28 @@ export const CoursePodcastsScreen: React.FC<CoursePodcastsScreenProps> = ({ rout
       podcastUrl: podcast.storageUrl,
       podcastAvailable: true,
     });
+  };
+
+  const handleDeletePress = (podcast: LessonPodcast) => {
+    Alert.alert(
+      'Delete podcast',
+      `Remove "${podcast.lessonTitle}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deletePodcastEpisode(podcast.id);
+              loadPodcasts();
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete podcast');
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -151,6 +174,13 @@ export const CoursePodcastsScreen: React.FC<CoursePodcastsScreenProps> = ({ rout
                   </View>
                 </View>
 
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeletePress(podcast)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="trash-outline" size={22} color={colors.textTertiary} />
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.playButton}
                   onPress={() => handlePodcastPress(podcast)}
@@ -253,6 +283,10 @@ const styles = StyleSheet.create({
   podcastMetaText: {
     fontSize: 13,
     color: colors.textTertiary,
+  },
+  deleteButton: {
+    padding: spacing.sm,
+    marginRight: spacing.xs,
   },
   playButton: {
     padding: spacing.xs,

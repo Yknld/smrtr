@@ -36,8 +36,9 @@ async function submitRunPodJob(
   apiKey: string,
   requestId: string
 ): Promise<string> {
-  console.log(`[${requestId}] Submitting TTS job to RunPod (lang: ${language}, voice: ${voice})...`);
-  const submitResponse = await fetch(`${RUNPOD_BASE_URL}/run`, {
+  const runUrl = `${RUNPOD_BASE_URL}/run`;
+  console.log(`[${requestId}] Submitting TTS job to RunPod: ${runUrl} (lang: ${language}, voice: ${voice}, key: ${apiKey ? "set" : "MISSING"})`);
+  const submitResponse = await fetch(runUrl, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
@@ -49,71 +50,71 @@ async function submitRunPodJob(
         format: 'mp3',
         speed,
         voice,
-        language, // Support multiple languages (en, ru, etc.)
-        exaggeration: 0.7, // Higher exaggeration for more expressive, natural podcast voices
+        language,
+        exaggeration: 0.7,
       }
     })
   });
 
+  const responseText = await submitResponse.text();
   if (!submitResponse.ok) {
-    const errorText = await submitResponse.text();
-    throw new Error(`RunPod submit failed: ${submitResponse.status} - ${errorText}`);
+    console.error(`[${requestId}] RunPod submit failed: ${submitResponse.status} - ${responseText}`);
+    throw new Error(`RunPod submit failed: ${submitResponse.status} - ${responseText}`);
   }
 
-  const submitData: RunPodJobResponse = await submitResponse.json();
+  let submitData: RunPodJobResponse;
+  try {
+    submitData = JSON.parse(responseText) as RunPodJobResponse;
+  } catch {
+    console.error(`[${requestId}] RunPod response not JSON: ${responseText.slice(0, 200)}`);
+    throw new Error(`RunPod returned invalid JSON`);
+  }
   console.log(`[${requestId}] Job submitted: ${submitData.id}`);
   return submitData.id;
 }
 
-// Helper function to POLL a RunPod job until completion
-async function pollRunPodJob(
+// Check RunPod job status ONCE (no blocking loop). Returns audio if done, null if still in progress.
+// Client/cron calls the Edge Function every ~15s; each invocation checks all in-flight jobs once and
+// collects any that are done, so we stay under the ~60s Edge Function timeout.
+async function checkRunPodJobOnce(
   jobId: string,
   apiKey: string,
   requestId: string,
   segmentSeq: number
-): Promise<Uint8Array> {
-  let pollAttempts = 0;
-  const MAX_POLL_ATTEMPTS = 60; // 60 attempts × 2s = 2 minutes max
-  
-  while (pollAttempts < MAX_POLL_ATTEMPTS) {
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-    pollAttempts++;
+): Promise<{ audio: Uint8Array } | { failed: string } | null> {
+  const statusResponse = await fetch(`${RUNPOD_BASE_URL}/status/${jobId}`, {
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+  });
 
-    const statusResponse = await fetch(`${RUNPOD_BASE_URL}/status/${jobId}`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      }
-    });
-
-    if (!statusResponse.ok) {
-      throw new Error(`RunPod status check failed: ${statusResponse.status}`);
-    }
-
-    const statusData: RunPodStatusResponse = await statusResponse.json();
-    
-    if (pollAttempts % 5 === 0) { // Log every 5 attempts (10 seconds)
-      console.log(`[${requestId}] Seg ${segmentSeq} job ${jobId}: ${statusData.status} (${pollAttempts * 2}s)`);
-    }
-
-    if (statusData.status === 'COMPLETED' && statusData.output) {
-      // Decode base64 audio
-      const audioBase64 = statusData.output.audio_base64;
-      const binaryAudio = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
-      console.log(`[${requestId}] ✓ Seg ${segmentSeq} complete: ${binaryAudio.length} bytes`);
-      return binaryAudio;
-    } else if (statusData.status === 'FAILED') {
-      throw new Error(`RunPod job failed: ${statusData.error || 'Unknown error'}`);
-    }
-    
-    // Continue polling if IN_QUEUE or IN_PROGRESS
+  if (!statusResponse.ok) {
+    console.error(`[${requestId}] RunPod status failed: ${statusResponse.status}`);
+    return null;
   }
 
-  throw new Error(`RunPod job timed out after ${MAX_POLL_ATTEMPTS} attempts`);
+  const statusData: RunPodStatusResponse = await statusResponse.json();
+
+  if (statusData.status === 'COMPLETED' && statusData.output?.audio_base64) {
+    const binaryAudio = Uint8Array.from(atob(statusData.output.audio_base64), c => c.charCodeAt(0));
+    console.log(`[${requestId}] ✓ Seg ${segmentSeq} job ${jobId} complete: ${binaryAudio.length} bytes`);
+    return { audio: binaryAudio };
+  }
+  if (statusData.status === 'FAILED') {
+    const msg = statusData.error || 'Unknown error';
+    console.error(`[${requestId}] Seg ${segmentSeq} job ${jobId} failed: ${msg}`);
+    return { failed: msg };
+  }
+  // IN_QUEUE or IN_PROGRESS: leave for next invocation
+  return null;
 }
 
 // RunPod Chatterbox Multilingual TTS Configuration
 const RUNPOD_ENDPOINT_ID = "f1hyps48e61yf7"; // Multilingual model (23 languages)
 const RUNPOD_BASE_URL = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}`;
+
+/** Submit up to this many queued segments to RunPod per invocation (no wait). Workers process in parallel. */
+const SUBMIT_BATCH = 10;
+/** Check up to this many in-flight jobs per invocation (one status request each; no blocking). Keeps invocation under ~60s. */
+const CHECK_BATCH = 10;
 
 // Voice configurations for speakers
 // Using natural human voices (8s samples)
@@ -247,20 +248,77 @@ serve(async (req: Request) => {
       console.log(`[${requestId}] Service call - allowing TTS for episode in '${episode.status}' state`);
     }
 
-    // Get all queued segments for this episode
-    let segmentsQuery = supabaseClient
+    let processedCount = 0;
+    let failedCount = 0;
+    let submittedCount = 0;
+
+    // ----- PHASE 1: Poll in-flight jobs (up to POLL_BATCH) and upload when complete -----
+    const { data: generatingSegments } = await supabaseAdmin
+      .from("podcast_segments")
+      .select("id, seq, speaker, text, runpod_job_id")
+      .eq("episode_id", episode_id)
+      .eq("user_id", episode.user_id)
+      .eq("tts_status", "generating")
+      .not("runpod_job_id", "is", null)
+      .order("seq", { ascending: true })
+      .limit(CHECK_BATCH);
+
+    if (generatingSegments && generatingSegments.length > 0) {
+      console.log(`[${requestId}] ===== PHASE 1: Checking ${generatingSegments.length} in-flight jobs (one status check each) =====`);
+      const checkResults = await Promise.all(
+        generatingSegments.map(async (seg: { id: string; seq: number; speaker: string; text: string; runpod_job_id: string }) => {
+          const result = await checkRunPodJobOnce(
+            seg.runpod_job_id,
+            runpodApiKey,
+            requestId,
+            seg.seq
+          );
+          if (result === null) return { status: "pending" as const };
+          if ("failed" in result) {
+            await supabaseAdmin
+              .from("podcast_segments")
+              .update({ tts_status: "failed", runpod_job_id: null })
+              .eq("id", seg.id);
+            return { status: "failed" as const };
+          }
+          const audioPath = `podcasts/${episode.user_id}/${episode_id}/seg_${seg.seq}_${seg.speaker}.mp3`;
+          const { error: uploadError } = await supabaseAdmin.storage
+            .from("tts_audio")
+            .upload(audioPath, result.audio, { contentType: "audio/mpeg", upsert: true });
+          if (uploadError) {
+            await supabaseAdmin
+              .from("podcast_segments")
+              .update({ tts_status: "failed", runpod_job_id: null })
+              .eq("id", seg.id);
+            return { status: "failed" as const };
+          }
+          await supabaseAdmin
+            .from("podcast_segments")
+            .update({
+              tts_status: "ready",
+              audio_bucket: "tts_audio",
+              audio_path: audioPath,
+              duration_ms: Math.floor(seg.text.length * 50),
+              runpod_job_id: null,
+            })
+            .eq("id", seg.id);
+          return { status: "ready" as const };
+        })
+      );
+      processedCount = checkResults.filter((r) => r.status === "ready").length;
+      failedCount = checkResults.filter((r) => r.status === "failed").length;
+      console.log(`[${requestId}] Check phase: ${processedCount} ready, ${failedCount} failed, ${checkResults.filter((r) => r.status === "pending").length} still in progress`);
+    }
+
+    // ----- PHASE 2: Submit queued segments to RunPod (no wait; workers process in parallel) -----
+    const { data: queuedSegments, error: segmentsError } = await supabaseAdmin
       .from("podcast_segments")
       .select("id, seq, speaker, text, tts_status")
       .eq("episode_id", episode_id)
+      .eq("user_id", episode.user_id)
       .eq("tts_status", "queued")
-      .order("seq", { ascending: true });
-    
-    // Only filter by user_id if not a service call
-    if (!isServiceCall && user) {
-      segmentsQuery = segmentsQuery.eq("user_id", user.id);
-    }
-    
-    const { data: segments, error: segmentsError } = await segmentsQuery;
+      .order("seq", { ascending: true })
+      .limit(SUBMIT_BATCH);
 
     if (segmentsError) {
       console.error(`[${requestId}] Failed to fetch segments:`, segmentsError);
@@ -270,213 +328,90 @@ serve(async (req: Request) => {
       );
     }
 
-    if (!segments || segments.length === 0) {
-      console.log(`[${requestId}] No queued segments found`);
-      return new Response(
-        JSON.stringify({ error: "No queued segments found" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`[${requestId}] Found ${segments.length} segments to process`);
-
-
-    console.log(`[${requestId}] ===== PHASE 1: Submitting ALL ${segments.length} jobs to RunPod =====`);
-    console.log(`[${requestId}] This ensures jobs are distributed across workers`);
-
-    // PHASE 1: Submit ALL jobs to RunPod at once and collect job IDs
-    const jobSubmissions = await Promise.allSettled(segments.map(async (segment) => {
-      try {
-        // Update segment status to generating
-        await supabaseClient
-          .from("podcast_segments")
-          .update({ tts_status: "generating" })
-          .eq("id", segment.id);
-
-        // Get voice config for this speaker
-        const voiceConfig = VOICE_CONFIG[segment.speaker as 'a' | 'b'];
-
-        // Submit job to RunPod (doesn't wait for completion)
-        const jobId = await submitRunPodJob(
-          segment.text,
-          voiceConfig.speed,
-          voiceConfig.voice,
-          episode.language || 'en', // Use episode language, default to English
-          runpodApiKey,
-          requestId
-        );
-
-        console.log(`[${requestId}] ✓ Seg ${segment.seq} submitted as job ${jobId}`);
-        
-        return {
-          segment,
-          jobId,
-          voiceConfig
-        };
-      } catch (error: any) {
-        console.error(`[${requestId}] ✗ Failed to submit seg ${segment.seq}:`, error.message);
-        await supabaseClient
-          .from("podcast_segments")
-          .update({ tts_status: "failed", error: error.message })
-          .eq("id", segment.id);
-        throw error;
-      }
-    }));
-
-    const successfulSubmissions = jobSubmissions
-      .filter(r => r.status === 'fulfilled')
-      .map(r => (r as PromiseFulfilledResult<any>).value);
-    
-    const failedSubmissions = jobSubmissions.filter(r => r.status === 'rejected').length;
-    
-    console.log(`[${requestId}] ===== PHASE 1 COMPLETE =====`);
-    console.log(`[${requestId}] ✓ Submitted: ${successfulSubmissions.length}`);
-    console.log(`[${requestId}] ✗ Failed: ${failedSubmissions}`);
-    console.log(`[${requestId}] All ${successfulSubmissions.length} jobs are now in RunPod's queue`);
-    console.log(`[${requestId}] Workers will process them in parallel`);
-    console.log('');
-    console.log(`[${requestId}] ===== PHASE 2: Polling for completion =====`);
-
-    // PHASE 2: Poll ALL jobs in parallel
-    const segmentPromises = successfulSubmissions.map(async ({ segment, jobId, voiceConfig }) => {
-      try {
-        // Poll until complete
-        const binaryAudio = await pollRunPodJob(
-          jobId,
-          runpodApiKey,
-          requestId,
-          segment.seq
-        );
-
-        // RunPod Chatterbox TTS returns MP3 format
-        console.log(`[${requestId}] Step 4: Preparing MP3 audio for upload...`);
-        const fileExt = 'mp3';
-        const uploadContentType = 'audio/mpeg';
-        
-        console.log(`[${requestId}] Step 4: ✓ Format: ${fileExt}, Size: ${binaryAudio.length} bytes`);
-        
-        // Upload to storage with explicit contentType
-        // Use episode.user_id instead of user.id (works for both service and user calls)
-        const audioPath = `podcasts/${episode.user_id}/${episode_id}/seg_${segment.seq}_${segment.speaker}.${fileExt}`;
-        console.log(`[${requestId}] Step 5: Uploading to storage...`);
-        console.log(`[${requestId}] Upload path: ${audioPath}`);
-        console.log(`[${requestId}] Content type: ${uploadContentType}`);
-        
-        const { error: uploadError } = await supabaseAdmin.storage
-          .from("tts_audio")
-          .upload(audioPath, binaryAudio, {
-            contentType: uploadContentType,
-            upsert: true,
-          });
-
-        if (uploadError) {
-          console.error(`[${requestId}] ✗ Upload error for segment ${segment.seq}:`, uploadError);
-          console.error(`[${requestId}] Upload error message:`, uploadError.message);
-          console.error(`[${requestId}] Upload error details:`, JSON.stringify(uploadError));
-          
+    if (queuedSegments && queuedSegments.length > 0) {
+      console.log(`[${requestId}] ===== PHASE 2: Submitting ${queuedSegments.length} segments to RunPod (parallel workers) =====`);
+      const submitResults = await Promise.allSettled(
+        queuedSegments.map(async (segment: { id: string; seq: number; speaker: string; text: string }) => {
+          const voiceConfig = VOICE_CONFIG[segment.speaker as "a" | "b"];
+          const jobId = await submitRunPodJob(
+            segment.text,
+            voiceConfig.speed,
+            voiceConfig.voice,
+            episode.language || "en",
+            runpodApiKey,
+            requestId
+          );
           await supabaseAdmin
             .from("podcast_segments")
-            .update({ tts_status: "failed" })
+            .update({ tts_status: "generating", runpod_job_id: jobId })
             .eq("id", segment.id);
-          
-          throw new Error(`Upload failed: ${uploadError.message}`);
+          return jobId;
+        })
+      );
+      submittedCount = submitResults.filter((r) => r.status === "fulfilled").length;
+      for (let i = 0; i < submitResults.length; i++) {
+        const seg = queuedSegments[i];
+        if (submitResults[i].status === "rejected" && seg) {
+          await supabaseAdmin
+            .from("podcast_segments")
+            .update({ tts_status: "failed", runpod_job_id: null })
+            .eq("id", seg.id);
+          failedCount += 1;
         }
-        console.log(`[${requestId}] Step 5: ✓ Upload successful`);
-
-        // Update segment with audio info and mark as ready
-        // Use admin client to bypass RLS (works for both service and user calls)
-        console.log(`[${requestId}] Step 6: Updating segment status to 'ready'...`);
-        const { error: updateError } = await supabaseAdmin
-          .from("podcast_segments")
-          .update({
-            tts_status: "ready",
-            audio_bucket: "tts_audio",
-            audio_path: audioPath,
-            duration_ms: Math.floor(segment.text.length * 50), // Rough estimate: 50ms per char
-          })
-          .eq("id", segment.id);
-        
-        if (updateError) {
-          console.error(`[${requestId}] ✗ Failed to update segment ${segment.id}:`, updateError);
-          throw new Error(`Update failed: ${updateError.message}`);
-        }
-        console.log(`[${requestId}] Step 6: ✓ Segment marked as ready`);
-
-        console.log(`[${requestId}] ===== ✓ Successfully processed segment ${segment.seq} =====`);
-        return { success: true, seq: segment.seq };
-
-      } catch (segmentError) {
-        console.error(`[${requestId}] ✗ Error processing segment ${segment.seq}:`, segmentError);
-        console.error(`[${requestId}] Segment error message:`, segmentError.message);
-        console.error(`[${requestId}] Segment error stack:`, segmentError.stack);
-        
-        await supabaseClient
-          .from("podcast_segments")
-          .update({ tts_status: "failed" })
-          .eq("id", segment.id);
-        
-        return { success: false, seq: segment.seq };
       }
-    });
+      console.log(`[${requestId}] Submit phase: ${submittedCount} sent to RunPod`);
+    }
 
-    // Wait for all segments to complete (or fail)
-    console.log(`[${requestId}] Waiting for all ${segments.length} segments to process...`);
-    const results = await Promise.allSettled(segmentPromises);
-    
-    // Count successes and failures
-    const processedCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
-    const failedCount = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length;
+    if (processedCount === 0 && submittedCount === 0 && (!queuedSegments || queuedSegments.length === 0)) {
+      const { count: totalSegments } = await supabaseAdmin
+        .from("podcast_segments")
+        .select("id", { count: "exact", head: true })
+        .eq("episode_id", episode_id)
+        .eq("user_id", episode.user_id);
+      console.log(`[${requestId}] No queued or in-flight segments (episode has ${totalSegments ?? 0} total)`);
+      // Fall through to episode status check
+    }
 
-    console.log(`[${requestId}] ===== Segment processing complete =====`);
-    console.log(`[${requestId}] Processed: ${processedCount}, Failed: ${failedCount}`);
-
-    // Check if all segments are now ready
-    console.log(`[${requestId}] Checking final status of all segments...`);
-    const { data: allSegments } = await supabaseClient
+    // Check if all segments are now ready (or if more queued = client should call again)
+    const { data: allSegments } = await supabaseAdmin
       .from("podcast_segments")
       .select("tts_status")
       .eq("episode_id", episode_id)
-      .eq("user_id", user.id);
+      .eq("user_id", episode.user_id);
 
-    console.log(`[${requestId}] Total segments: ${allSegments?.length || 0}`);
-    const statusCounts = allSegments?.reduce((acc, s) => {
-      acc[s.tts_status] = (acc[s.tts_status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    console.log(`[${requestId}] Status breakdown:`, statusCounts);
+    const totalCount = allSegments?.length ?? 0;
+    const readyCount = allSegments?.filter(s => s.tts_status === "ready").length ?? 0;
+    const queuedCount = allSegments?.filter(s => s.tts_status === "queued").length ?? 0;
+    const generatingCount = allSegments?.filter(s => s.tts_status === "generating").length ?? 0;
+    const allReady = totalCount > 0 && (allSegments?.every(s => s.tts_status === "ready") ?? false);
 
-    const allReady = allSegments?.every(s => s.tts_status === "ready") ?? false;
+    console.log(`[${requestId}] Segment status: ${readyCount} ready, ${queuedCount} queued, ${generatingCount} generating, ${totalCount} total`);
 
     if (allReady) {
-      // Update episode status to ready
       console.log(`[${requestId}] All segments ready! Marking episode as ready...`);
-      await supabaseClient
+      await supabaseAdmin
         .from("podcast_episodes")
         .update({ status: "ready" })
         .eq("id", episode_id);
-
       console.log(`[${requestId}] ✓ Episode marked as ready`);
-    } else {
-      const stillQueued = allSegments?.filter(s => s.tts_status === "queued").length ?? 0;
-      console.log(`[${requestId}] Still queued: ${stillQueued}`);
-      
-      if (stillQueued === 0) {
-        // No more queued segments, but not all ready (some failed)
-        console.error(`[${requestId}] No more queued segments but not all ready - marking episode as failed`);
-        await supabaseClient
-          .from("podcast_episodes")
-          .update({ status: "failed", error: `${failedCount} segments failed to generate` })
-          .eq("id", episode_id);
-        console.error(`[${requestId}] Episode marked as failed`);
-      }
+    } else if (queuedCount === 0 && generatingCount === 0 && readyCount < totalCount) {
+      // Only mark failed when nothing is in progress (no queued, no generating) and some segments failed
+      const failedCountTotal = totalCount - readyCount;
+      console.error(`[${requestId}] No queued or generating segments but not all ready - marking episode as failed`);
+      await supabaseAdmin
+        .from("podcast_episodes")
+        .update({ status: "failed", error: `${failedCountTotal} segments failed to generate` })
+        .eq("id", episode_id);
     }
 
     return new Response(
       JSON.stringify({
         episode_id,
         processed: processedCount,
+        submitted: submittedCount,
         failed: failedCount,
-        status: allReady ? "ready" : "processing",
+        status: allReady ? "ready" : "voicing",
+        more_work: queuedCount > 0 || generatingCount > 0,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

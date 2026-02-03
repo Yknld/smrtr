@@ -47,7 +47,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "gemini-1.5-pro";
+const MODEL = "gemini-3-pro-preview";
 const MAX_INPUT_CHARS = 12000;
 const MIN_DURATION = 5;
 const MAX_DURATION = 20;

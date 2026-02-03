@@ -8,6 +8,7 @@ import {
   StatusBar,
   TouchableOpacity,
   Linking,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../ui/tokens';
@@ -16,7 +17,7 @@ import { NotesPreview } from '../../components/NotesPreview/NotesPreview';
 import { BottomSheet, BottomSheetAction } from '../../components/BottomSheet/BottomSheet';
 import { RenameLessonModal } from '../../components/RenameLessonModal/RenameLessonModal';
 import { ScheduleBottomSheet } from '../../components/ScheduleBottomSheet/ScheduleBottomSheet';
-import { updateLessonTitle } from '../../data/lessons.repository';
+import { updateLessonTitle, deleteLesson } from '../../data/lessons.repository';
 import { supabase, SUPABASE_URL } from '../../config/supabase';
 import { generateYouTubeRecommendations, fetchYouTubeResources } from '../../data/youtube.repository';
 import { upsertStudyPlan, buildRRule } from '../../data/schedule.repository';
@@ -344,7 +345,25 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
       label: 'Delete Lesson',
       onPress: () => {
         setMenuVisible(false);
-        console.log('Delete lesson');
+        Alert.alert(
+          'Delete Lesson',
+          `Delete "${currentTitle}"? This cannot be undone.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Delete',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await deleteLesson(lessonId);
+                  navigation.goBack();
+                } catch (error: any) {
+                  Alert.alert('Error', error.message || 'Failed to delete lesson');
+                }
+              },
+            },
+          ]
+        );
       },
     },
   ];
@@ -713,105 +732,97 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
           {/* Section Label */}
           <Text style={styles.sectionLabel}>Actions</Text>
 
-          {/* Action Grid - SECONDARY, ordered by importance */}
-          <View style={styles.grid}>
-            {/* 1. Interact (interactive pages from RunPod) */}
-            <View style={styles.gridItem}>
-              <ActionTile
-                icon="game-controller-outline"
-                label="Interact"
-                subtitle="Practice steps"
-                badge={getBadgeState('interactive_pages')}
-                disabled={lessonData.processing.has('interactive_pages')}
-                onPress={() => {
-                  if (lessonData.outputs.interactive_pages) {
-                    handleInteractiveSolver();
-                  } else {
-                    handleGenerateInteractivePages();
-                  }
-                }}
-              />
+          {/* Action pyramid: Live|AI Tutor | Interact|Podcast|Video | Flashcards|Quiz | Assets */}
+          <View style={styles.pyramid}>
+            <View style={styles.pyramidRow}>
+              <View style={styles.pyramidItem}>
+                <ActionTile
+                  icon="radio-outline"
+                  label="Live"
+                  subtitle="Record + translate"
+                  onPress={handleLiveTranscription}
+                />
+              </View>
+              <View style={styles.pyramidItem}>
+                <ActionTile
+                  icon="chatbubbles-outline"
+                  label="AI Tutor"
+                  onPress={handleAITutor}
+                />
+              </View>
             </View>
-
-            {/* 2. Live Transcription (includes translation + listen) */}
-            <View style={styles.gridItem}>
-              <ActionTile
-                icon="radio-outline"
-                label="Live"
-                subtitle="Record + translate"
-                onPress={handleLiveTranscription}
-              />
+            <View style={styles.pyramidRow}>
+              <View style={styles.pyramidItem}>
+                <ActionTile
+                  icon="game-controller-outline"
+                  label="Interact"
+                  subtitle="Practice steps"
+                  badge={getBadgeState('interactive_pages')}
+                  disabled={lessonData.processing.has('interactive_pages')}
+                  onPress={() => {
+                    if (lessonData.outputs.interactive_pages) {
+                      handleInteractiveSolver();
+                    } else {
+                      handleGenerateInteractivePages();
+                    }
+                  }}
+                  onReset={isInteractGenerating ? handleResetInteractiveGeneration : undefined}
+                />
+              </View>
+              <View style={styles.pyramidItem}>
+                <ActionTile
+                  icon="mic-outline"
+                  label="Podcast"
+                  badge={getBadgeState('podcast')}
+                  disabled={lessonData.processing.has('podcast')}
+                  onPress={handlePodcast}
+                />
+              </View>
+              <View style={styles.pyramidItem}>
+                <ActionTile
+                  icon="videocam-outline"
+                  label="Video"
+                  subtitle="30s explainer"
+                  badge={getBadgeState('video')}
+                  disabled={lessonData.processing.has('video')}
+                  onPress={() => {
+                    if (lessonData.outputs.video) {
+                      handlePlayVideo();
+                    } else {
+                      handleGenerateVideo();
+                    }
+                  }}
+                />
+              </View>
             </View>
-            
-            {/* 3. AI Tutor */}
-            <View style={styles.gridItem}>
-              <ActionTile
-                icon="chatbubbles-outline"
-                label="AI Tutor"
-                onPress={handleAITutor}
-              />
+            <View style={styles.pyramidRow}>
+              <View style={styles.pyramidItem}>
+                <ActionTile
+                  icon="layers-outline"
+                  label="Flashcards"
+                  badge={getBadgeState('flashcards')}
+                  disabled={lessonData.processing.has('flashcards')}
+                  onPress={handleFlashcards}
+                />
+              </View>
+              <View style={styles.pyramidItem}>
+                <ActionTile
+                  icon="help-circle-outline"
+                  label="Quiz"
+                  badge={getBadgeState('quiz')}
+                  disabled={lessonData.processing.has('quiz')}
+                  onPress={handleQuiz}
+                />
+              </View>
             </View>
-            
-            {/* 4. Flashcards */}
-            <View style={styles.gridItem}>
-              <ActionTile
-                icon="layers-outline"
-                label="Flashcards"
-                badge={getBadgeState('flashcards')}
-                disabled={lessonData.processing.has('flashcards')}
-                onPress={handleFlashcards}
-              />
-            </View>
-            
-            {/* 5. Quiz */}
-            <View style={styles.gridItem}>
-              <ActionTile
-                icon="help-circle-outline"
-                label="Quiz"
-                badge={getBadgeState('quiz')}
-                disabled={lessonData.processing.has('quiz')}
-                onPress={handleQuiz}
-              />
-            </View>
-            
-            {/* 6. Podcast */}
-            <View style={styles.gridItem}>
-              <ActionTile
-                icon="mic-outline"
-                label="Podcast"
-                badge={getBadgeState('podcast')}
-                disabled={lessonData.processing.has('podcast')}
-                onPress={handlePodcast}
-              />
-            </View>
-            
-            {/* 7. Video */}
-            <View style={styles.gridItem}>
-              <ActionTile
-                icon="videocam-outline"
-                label="Video"
-                subtitle="30s explainer"
-                badge={getBadgeState('video')}
-                disabled={lessonData.processing.has('video')}
-                onPress={() => {
-                  // If video exists, play it directly
-                  if (lessonData.outputs.video) {
-                    handlePlayVideo();
-                  } else {
-                    // Otherwise generate new video
-                    handleGenerateVideo();
-                  }
-                }}
-              />
-            </View>
-
-            {/* 8. Assets */}
-            <View style={styles.gridItem}>
-              <ActionTile
-                icon="folder-outline"
-                label="Assets"
-                onPress={handleAssets}
-              />
+            <View style={styles.pyramidRow}>
+              <View style={styles.pyramidItem}>
+                <ActionTile
+                  icon="folder-outline"
+                  label="Assets"
+                  onPress={handleAssets}
+                />
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -941,5 +952,18 @@ const styles = StyleSheet.create({
   gridItem: {
     width: '50%',
     padding: spacing.xs,
+  },
+  pyramid: {
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  pyramidRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: spacing.sm,
+  },
+  pyramidItem: {
+    width: 100,
+    minWidth: 100,
   },
 });

@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Icon } from '../components/Icons'
+import { MathText } from '../components/MathText'
 import { fetchQuiz, generateQuiz } from '../data/lessonOutputs.repository'
 import { getQuizQuestions } from '../data/mock'
 import './screens.css'
@@ -156,7 +157,7 @@ export default function QuizScreen() {
                     <span className="so-quiz-review-q">Q{i + 1}</span>
                     <span className="so-quiz-review-status">{correct ? 'Correct' : 'Wrong'}</span>
                     {!correct && (
-                      <span className="so-quiz-review-answer">Correct: {q.options[q.correctIndex]}</span>
+                      <span className="so-quiz-review-answer">Correct: <MathText text={q.options[q.correctIndex]} /></span>
                     )}
                   </li>
                 )
@@ -185,7 +186,7 @@ export default function QuizScreen() {
           <p className="so-quiz-progress">
             Question {index + 1} of {questions.length}
           </p>
-          <h2 className="so-quiz-stem">{question.stem}</h2>
+          <h2 className="so-quiz-stem"><MathText text={question.stem} /></h2>
           <div className="so-quiz-options" role="radiogroup" aria-label="Choose an answer">
             {question.options.map((opt, i) => {
               const isCorrect = i === question.correctIndex
@@ -203,7 +204,7 @@ export default function QuizScreen() {
                   disabled={showFeedback}
                   aria-describedby={showFeedback && isCorrect ? 'quiz-correct-answer' : undefined}
                 >
-                  {opt}
+                  <MathText text={opt} />
                 </button>
               )
             })}
@@ -212,7 +213,7 @@ export default function QuizScreen() {
             <p id="quiz-correct-answer" className="so-quiz-feedback" aria-live="polite">
               {selected === question.correctIndex
                 ? 'Correct.'
-                : `Correct answer: ${question.options[question.correctIndex]}`}
+                : <>Correct answer: <MathText text={question.options[question.correctIndex]} /></>}
             </p>
           )}
           <div className="so-quiz-actions">

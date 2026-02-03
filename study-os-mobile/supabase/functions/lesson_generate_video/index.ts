@@ -2,8 +2,8 @@
 // Edge Function: lesson_generate_video
 // ============================================================================
 // 
-// Purpose: Generate a 30-second educational video visualization using Remotion
-//          via OpenHand agent, with Gemini 3 Pro Preview as the video planner
+// Purpose: Generate a 1–3 minute educational video visualization using Remotion
+//          via OpenHand agent, with Gemini 3 Pro Preview as the video planner (no subtitles)
 // 
 // Request:
 //   POST /lesson_generate_video
@@ -27,9 +27,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "supabase";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const corsHeaders = {
+const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 interface GenerateVideoRequest {
@@ -126,13 +127,12 @@ async function processVideoAsync(
 
         console.log(`[${requestId}] Video uploaded successfully: ${storagePath}`);
         
-        // Update asset record to mark as ready
+        // Update asset record to mark as ready (keep existing duration_ms from story plan)
         await supabaseAdmin
           .from("lesson_assets")
           .update({
             storage_path: storagePath,
             mime_type: "video/mp4",
-            duration_ms: 30000,
           })
           .eq("id", videoId);
 
@@ -170,7 +170,7 @@ async function processVideoAsync(
   }
 }
 
-// Helper: Get lesson context (summary, transcript, or title)
+// Helper: Get lesson context (notes, summary, transcript, or title)
 async function getLessonContext(
   supabaseClient: any,
   lessonId: string,
@@ -185,7 +185,30 @@ async function getLessonContext(
 
   const lessonTitle = lesson?.title || "Lesson";
 
-  // 1. Try to get summary from lesson_outputs
+  // 1. Prefer lesson notes (single source of truth for generations)
+  const { data: notesOutput } = await supabaseClient
+    .from("lesson_outputs")
+    .select("notes_final_text, notes_raw_text")
+    .eq("lesson_id", lessonId)
+    .eq("type", "notes")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const notesText = notesOutput?.notes_final_text ?? notesOutput?.notes_raw_text ?? "";
+  if (notesText && notesText.trim().length > 0) {
+    const context = notesText.length > MAX_CONTEXT_CHARS
+      ? notesText.slice(0, MAX_CONTEXT_CHARS) + "\n\n[Content truncated for video context.]"
+      : notesText.trim();
+    console.log(`[${requestId}] Using lesson notes as context (${context.length} chars)`);
+    return {
+      context,
+      contextSource: "notes",
+      lessonTitle,
+    };
+  }
+
+  // 2. Try summary from lesson_outputs
   const { data: summaryOutput } = await supabaseClient
     .from("lesson_outputs")
     .select("content_json")
@@ -194,7 +217,7 @@ async function getLessonContext(
     .eq("status", "ready")
     .order("created_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (summaryOutput?.content_json?.summary) {
     console.log(`[${requestId}] Using lesson summary as context`);
@@ -205,7 +228,7 @@ async function getLessonContext(
     };
   }
 
-  // 2. If no summary, try live transcript segments
+  // 3. If no notes/summary, try live transcript segments
   const { data: sessions } = await supabaseClient
     .from("study_sessions")
     .select("id")
@@ -231,8 +254,8 @@ async function getLessonContext(
     }
   }
 
-  // 3. Fallback to just the lesson title
-  console.log(`[${requestId}] Using lesson title as context (no other content available)`);
+  // 4. Fallback to just the lesson title
+  console.log(`[${requestId}] Using lesson title as context (no notes/summary/transcript available)`);
   return {
     context: `This lesson is about: ${lessonTitle}`,
     contextSource: "title_only",
@@ -259,7 +282,7 @@ async function generateStoryPlan(
     },
   });
 
-  const prompt = `You are a video storyboard planner. Generate a detailed storyboard JSON for a 30-second educational explainer video.
+  const prompt = `You are a video storyboard planner. Generate a detailed storyboard JSON for an educational explainer video between 1 and 3 minutes (60–180 seconds).
 
 LESSON TITLE: ${lessonTitle}
 
@@ -267,31 +290,31 @@ LESSON CONTENT:
 ${context}
 
 REQUIREMENTS:
-1. Create a storyboard with exactly 30 seconds total duration
-2. Break it into 3-5 scenes, each with clear visual and narrative content
+1. Create a storyboard with total duration between 60 and 180 seconds (1–3 minutes). Choose a natural length for the content; do not force exact timing.
+2. Break it into 5–12 scenes, each with clear visual and narrative content
 3. Each scene should have: type (e.g., "title", "explanation", "example", "recap"), seconds (duration), and content (text, bullets, equations, etc.)
 4. Make it visually engaging with mathematical/technical concepts if applicable
 5. Ensure smooth transitions between scenes
+6. No subtitles or burn-in on-screen text for narration.
 
 OUTPUT FORMAT (valid JSON only):
 {
   "meta": {
     "title": "Short engaging title",
-    "durationSec": 30,
+    "durationSec": 120,
     "fps": 30
   },
   "scenes": [
     {
       "type": "title",
-      "seconds": 3,
+      "seconds": 5,
       "content": {
-        "text": "Main title text",
-        "subtitle": "Optional subtitle"
+        "text": "Main title text"
       }
     },
     {
       "type": "explanation",
-      "seconds": 12,
+      "seconds": 25,
       "content": {
         "text": "Main explanation",
         "bullets": ["Key point 1", "Key point 2"]
@@ -299,7 +322,7 @@ OUTPUT FORMAT (valid JSON only):
     },
     {
       "type": "example",
-      "seconds": 10,
+      "seconds": 40,
       "content": {
         "text": "Example or visualization",
         "equation": "Optional equation if math-related"
@@ -307,7 +330,7 @@ OUTPUT FORMAT (valid JSON only):
     },
     {
       "type": "recap",
-      "seconds": 5,
+      "seconds": 10,
       "content": {
         "text": "Summary and key takeaway"
       }
@@ -316,7 +339,7 @@ OUTPUT FORMAT (valid JSON only):
 }
 
 IMPORTANT:
-- Total seconds must equal exactly 30
+- Total duration between 60 and 180 seconds (1–3 minutes). Do not add subtitles.
 - Return ONLY valid JSON, no markdown code blocks
 - Make content educational and clear
 - Include visual descriptions in content fields`;
@@ -335,23 +358,25 @@ IMPORTANT:
 
   const storyJSON: StoryJSON = JSON.parse(responseText);
 
-  // Validate and normalize duration
+  // Normalize duration only if outside 1–3 min. Allow 60–180s as-is.
   const totalSeconds = storyJSON.scenes.reduce((sum, scene) => sum + scene.seconds, 0);
-  if (totalSeconds !== 30) {
-    console.log(`[${requestId}] Adjusting scene durations to total 30 seconds (was ${totalSeconds})`);
-    const scale = 30 / totalSeconds;
+  const minSec = 60;
+  const maxSec = 180;
+  const targetSec = totalSeconds < minSec || totalSeconds > maxSec ? 120 : totalSeconds;
+  if (totalSeconds < minSec || totalSeconds > maxSec) {
+    const scale = targetSec / totalSeconds;
     storyJSON.scenes.forEach((scene) => {
-      scene.seconds = Math.round(scene.seconds * scale);
+      scene.seconds = Math.max(1, Math.round(scene.seconds * scale));
     });
-    // Ensure exact 30 seconds
     const newTotal = storyJSON.scenes.reduce((sum, scene) => sum + scene.seconds, 0);
-    const diff = 30 - newTotal;
+    const diff = targetSec - newTotal;
     if (diff !== 0 && storyJSON.scenes.length > 0) {
-      storyJSON.scenes[storyJSON.scenes.length - 1].seconds += diff;
+      storyJSON.scenes[storyJSON.scenes.length - 1].seconds = Math.max(1, storyJSON.scenes[storyJSON.scenes.length - 1].seconds + diff);
     }
+    storyJSON.meta.durationSec = targetSec;
+  } else {
+    storyJSON.meta.durationSec = totalSeconds;
   }
-
-  storyJSON.meta.durationSec = 30;
   storyJSON.meta.fps = 30;
 
   console.log(`[${requestId}] Story plan generated: ${storyJSON.scenes.length} scenes`);
@@ -364,12 +389,33 @@ function loadRemotionPrompt(
   geminiApiKey: string,
   userAvatar: string,
   aspectRatios: string[],
-  lessonId: string,
-  videoId: string,
-  githubToken?: string
+  _lessonId: string,
+  _videoId: string,
+  uploadUrl?: string,
+  uploadToken?: string
 ): string {
-  // Read the prompt template (we'll embed it since we can't read files in Deno edge functions easily)
-  // In production, you might want to store this in a database or environment variable
+  const hasAvatar = typeof userAvatar === "string" && userAvatar.trim().length > 0;
+  const hasDirectUpload = typeof uploadUrl === "string" && uploadUrl.length > 0 && typeof uploadToken === "string" && uploadToken.length > 0;
+  const uploadSection = hasDirectUpload
+    ? `
+UPLOAD TO LESSON (REQUIRED — run after out/video.mp4 exists)
+Upload the video directly to the lesson with this exact command (run from workspace root; no API key needed):
+curl -X POST -H "X-Upload-Token: ${uploadToken}" -H "Content-Type: video/mp4" --data-binary @out/video.mp4 "${uploadUrl}"
+You MUST run this curl after rendering. The video will not appear in the lesson until you do.`
+    : `
+DELIVERY
+When rendering is complete, ensure out/video.mp4 exists. Our system will retrieve it via OpenHand artifacts and upload it to the lesson.`;
+  const avatarSection = hasAvatar
+    ? `
+AVATAR (only because USER_AVATAR is provided):
+- USER_AVATAR = "${userAvatar}"
+- Download this URL once and save as public/avatar.png (or .jpg). Do not fetch any other remote assets.
+- Show avatar in a small circle badge near the title scene and final recap.`
+    : `
+NO AVATAR:
+- USER_AVATAR is empty. Do not download or reference any avatar. Do not fetch any remote URLs.
+- Use a simple placeholder circle with initials "U" for any speaker/host badge if needed.`;
+
   const promptTemplate = `ROLE
 You are OpenHands, a coding + execution agent. You have:
 - Web/page-reading ability (open & read docs/pages)
@@ -378,11 +424,10 @@ You are OpenHands, a coding + execution agent. You have:
 
 PRIMARY GOAL
 Generate a COMPLETE Remotion project that:
-1) Produces a 30-second narrated explainer video (MP4) from a Story JSON plan
-2) Uses Gemini to generate:
-   - a narration script that matches the story plan
-   - text subtitles timed to the narration
-   - TTS audio for narration
+1) Produces a narrated explainer video (MP4) from a Story JSON plan — 1 to 3 minutes (60–180 seconds). No subtitles or burn-in text.
+2) Uses Gemini for text and Gemini 2.5 Flash for TTS:
+   - Narration script only (no subtitles): use a Gemini text model (e.g. gemini-3-flash-preview)
+   - TTS (speech) audio: use Gemini 2.5 Flash only — TTS capability is on Gemini 2.5 Flash; no other Gemini model does TTS
 3) Renders outputs headlessly and writes final artifacts to /out
 4) Optionally produces alternate aspect ratios for mobile vs desktop.
 
@@ -400,225 +445,73 @@ NON-NEGOTIABLE OUTPUTS (must exist)
 - README.md (exact commands to reproduce, including API key env var usage)
 
 VIDEO SPEC
-- Total duration: about 30 seconds
+- Total duration: 1 to 3 minutes (60–180 seconds). Do not force exact length by whacking audio.
 - FPS: 30
 - Default resolution (16:9): 1280x720
 - If 9:16 enabled: 1080x1920
 - If 1:1 enabled: 1080x1080
-- Visual aesthetic: 3blueOnebrown style, minimalist,vector animation, smooth motion, clean typography .
-- No external assets (no remote fonts/images). Avatar may be inlined (download and embed locally) if provided.
+- Visual aesthetic: 3blueOnebrown style, minimalist, vector animation, smooth motion, clean typography.
+- No subtitles: do not burn in any on-screen captions or subtitle text.
+- No external assets except: only if USER_AVATAR is non-empty, download that single URL to public/avatar and use it. Otherwise do not fetch any remote URLs.
+${avatarSection}
 
 STORY PLAN CONTRACT
 - STORY_JSON is the source of truth.
-- It must include, at minimum:
-  - meta: { title, durationSec (must be 30), fps (30), width/height optional }
-  - scenes: array with ordered scenes
-  - Each scene includes: type, seconds, and content fields (text, bullets, equation, etc.)
-- If STORY_JSON durationSec != 30 or seconds don't sum to 30:
-  - Fix it by minimally adjusting per-scene seconds while keeping scene order.
-  - Write the corrected version to storyboard.final.json and use that for everything.
+- It must include meta (title, durationSec, fps) and scenes (type, seconds, content).
+- durationSec must be between 60 and 180 (1–3 minutes).
+- If scenes exist, write storyboard.final.json from STORY_JSON and use it for rendering. Do not post-process audio to hit an exact duration.
 
 GEMINI USAGE RULES (IMPORTANT)
 - NEVER hardcode API keys in source files.
-- Use GEMINI_API_KEY via environment variable in scripts:
-  - export GEMINI_API_KEY="..."
-- ALWAYS use gemini-3-flash-preview model for all Gemini API calls:
-  - For narration script generation: use model "gemini-3-flash-preview"
-  - For subtitle generation: use model "gemini-3-flash-preview"
-- For TTS audio: use Gemini TTS API via cli
-- Use Gemini for:
-  1) Narration script generation (short, clear, fits within 30s)
-  2) Subtitle lines with timestamps OR per-line durations
-  3) TTS audio for each subtitle chunk (or per scene)
-- Handle rate limits robustly:
-  - Implement retries with exponential backoff
-  - Cache responses to disk so reruns don't re-call Gemini unnecessarily
+- Use GEMINI_API_KEY via environment variable in scripts: export GEMINI_API_KEY="..."
+- For narration script generation only (no subtitles): use gemini-3-flash-preview (or another text-capable model).
+- For TTS (speech) you MUST use Gemini 2.5 Flash. TTS is only available on Gemini 2.5 Flash; do not assume other Gemini models can do TTS. Use model "gemini-2.5-flash" (or the exact 2.5 Flash model id from the Gemini API docs) for any generate-audio / TTS calls.
+- Handle rate limits: retries with exponential backoff; cache responses to disk.
 
 TTS REQUIREMENTS (IMPORTANT)
-- Generate audio with Gemini TTS (or the most appropriate Gemini TTS endpoint available).
-- If Gemini returns raw PCM or non-standard wav:
-  - Correctly wrap/convert to a standard WAV (PCM 16-bit, 24kHz mono is fine).
-- Merge all narration audio into one track (preferred) OR sequence clips precisely by timing.
-- Final MP4 MUST contain audible narration.
+- TTS capability applies to Gemini 2.5 Flash only. Use Gemini 2.5 Flash for all narration audio; no other model.
+- Generate audio with Gemini 2.5 Flash TTS. If the API returns raw PCM or non-standard wav, wrap to standard WAV (PCM 16-bit, 24kHz mono).
+- Merge narration into one track or sequence by timing. Final MP4 MUST have audible narration.
+- Control length upstream via script/scene design; do not stretch or trim audio after the fact to hit an exact duration.
 
-SUBTITLES REQUIREMENTS
-- Always burn-in subtitles as on-screen text overlays (bottom centered).
-- Avoid clipping:
-  - Use safe margins (at least 6% from edges)
-  - Use max-width and wrap lines
-  - Use a translucent background pill/box for readability.
-- Subtitles must align with audio timing.
+NO SUBTITLES
+- Do not add subtitles, captions, or any burn-in on-screen text for the narration. Video and audio only.
 
 MOBILE/DESKTOP RESPONSIVENESS
-- If OUTPUT_ASPECTS contains multiple ratios:
-  - Create separate Compositions:
-    - DerivativesVideo_16x9
-    - DerivativesVideo_9x16
-    - DerivativesVideo_1x1
-  - Use the same storyboard + audio timing.
-  - Adjust layout only (stacking, font size, graph position).
-  - Do NOT change the storyline or timing.
+- If OUTPUT_ASPECTS has multiple ratios, create separate Compositions (DerivativesVideo_16x9, etc.). Same storyboard + audio; adjust layout only.
 
 WEB READING / DOCS (DO THIS FIRST)
-Open and read:
-1) https://www.remotion.dev/docs/studio
-2) https://www.remotion.dev/docs/render
-3) https://www.remotion.dev/docs/player (if needed for layout guidance)
-Summarize in storyboard.md the key commands/APIs used for rendering and sequencing.
+Open and read: Remotion docs (studio, render, player). Summarize in storyboard.md.
 
 PROJECT REQUIREMENTS
-Create this structure:
-- package.json
-- tsconfig.json
-- src/index.tsx
-- src/Root.tsx
-- src/compositions/MainVideo.tsx
-- src/scenes/* (scene components, named based on STORY_JSON scene types)
-- src/ui/* (subtitle component, avatar badge, graph primitives)
-- public/avatar.(png|jpg) (optional, if user avatar provided and downloadable)
-- scripts/
-   - generate-narration.mjs   (calls Gemini; outputs narration.json)
-   - generate-tts.mjs         (calls Gemini TTS; outputs public/audio/narration.wav)
-   - extract-frames.sh        (ffmpeg to extract 10/30/50/70/90% frames)
-   - render-still.mjs or npm script
-   - render-mp4.mjs or npm script
-- out/ (final artifacts)
-- storyboard.md
-- storyboard.final.json
-- narration.json (Gemini output, cached)
-- README.md
+- package.json, tsconfig.json, src/index.tsx, src/Root.tsx, src/compositions/MainVideo.tsx
+- src/scenes/* (from STORY_JSON), src/ui/* (${hasAvatar ? "avatar badge," : ""} graph primitives only — no subtitle component)
+${hasAvatar ? "- public/avatar.(png|jpg) from USER_AVATAR download (only this one remote fetch)" : "- No public/avatar; no remote fetches"}
+- scripts: generate-narration.mjs, generate-tts.mjs, extract-frames.sh, render-*.mjs
+- out/ (final artifacts), storyboard.md, storyboard.final.json, narration.json, README.md
 
-NPM SCRIPTS (must exist)
-- npm run typecheck
-- npm run build (if needed)
-- npm run render:mp4
-- npm run render:still
-- npm run frames
-- npm run all (runs full pipeline in correct order)
+NPM SCRIPTS: typecheck, build (if needed), render:mp4, render:still, frames, all (full pipeline in order).
 
-FULL PIPELINE ORDER (npm run all must do this)
-1) Validate/normalize STORY_JSON -> write storyboard.final.json
-2) Generate narration.json using Gemini (if not cached)
-3) Generate narration.wav using Gemini TTS (if not cached)
-4) npm run typecheck
-5) Render MP4 for each requested aspect ratio
-   - If multiple aspects, output:
-     - out/video_16x9.mp4, out/video_9x16.mp4, out/video_1x1.mp4
-   - Also create out/video.mp4 as the default (first aspect in OUTPUT_ASPECTS)
-6) Render still.png from the default composition
-7) Extract frames from the default MP4 into out/frames/
-8) Write out/render-report.json with:
-   - success true/false
-   - aspects rendered
-   - fps, durationSec, frames
-   - file sizes
-   - any warnings (subtitle overflow, missing avatar, etc.)
+FULL PIPELINE ORDER (npm run all)
+1) Validate STORY_JSON -> storyboard.final.json
+2) Generate narration.json (Gemini text model) then narration.wav (Gemini 2.5 Flash TTS only)
+3) typecheck, render MP4(s), still.png, frames, render-report.json
 
 RENDERING METHOD
-Use Remotion CLI or @remotion/renderer. Choose whichever is most reliable for headless automation.
-The render must not require a GUI.
+Use Remotion CLI or @remotion/renderer. Headless only; no GUI.
 
-IMPORTANT QUALITY CHECKS (MUST IMPLEMENT)
-After render:
-- Confirm MP4 has an audio track (ffprobe or equivalent).
-- Confirm duration is ~30.0 seconds (tolerance ±0.2s).
-- Confirm files exist and are non-empty.
-
-AVATAR USAGE
-Show avatar in a small circle badge near the title scene + final recap.
-If avatar missing, show a placeholder circle with initials "U".
+QUALITY CHECKS
+- MP4 has audio track; duration 60–180s (1–3 min); files non-empty; no subtitles.
 
 EXECUTION REQUIREMENT
-You MUST actually run commands to completion:
-- npm install
-- npm run all
-If anything fails:
-- read the error
-- fix it
-- rerun until success
+Run: npm install, npm run all. If something fails, fix and rerun until success.
 
 FINAL RESPONSE FORMAT
-At the end print:
-1) One-paragraph summary of what was built
-2) Exact commands to rerun
-3) Output files list with sizes
-4) Confirm:
-   - "Audio present: YES"
-   - "Duration: 30s: YES"
-   - "Frames extracted: YES"
-   - "All requested aspects rendered: YES"
+At the end print: summary, exact commands to rerun, output files with sizes, and confirm Audio present / Duration 1–3 min / No subtitles / Frames extracted / Aspects rendered.
 
 SECURITY RULES
-- Do not print the API key in logs or final output.
-- Do not commit or store API keys in files.
-- narration.json can be stored but must not contain secrets.
-
-FINAL STEP - UPLOAD TO GITHUB (CRITICAL):
-After successfully rendering the video, you MUST upload it to GitHub:
-
-Run this bash script:
-
-#!/bin/bash
-VIDEO_ID="${videoId}"
-LESSON_ID="${lessonId}"
-GITHUB_TOKEN="${githubToken || 'GITHUB_TOKEN_NOT_SET'}"
-
-# 1. Install GitHub CLI (if not present)
-if ! command -v gh &> /dev/null; then
-  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null
-  sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-  echo "deb [arch=\$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-  sudo apt update
-  sudo apt install gh -y
-fi
-
-# 2. Authenticate
-echo "\$GITHUB_TOKEN" | gh auth login --with-token
-
-# 3. Clone/update repo
-if [ -d "video-artifacts" ]; then
-  cd video-artifacts && git pull
-else
-  gh repo clone Yknld/video-artifacts
-  cd video-artifacts
-fi
-
-# 4. Create videos directory
-mkdir -p videos
-
-# 5. Copy video (use the primary output)
-cp /workspace/out/video.mp4 ./videos/\${LESSON_ID}_\${VIDEO_ID}.mp4
-   
-# 6. Create metadata file
-cat > ./videos/\${LESSON_ID}_\${VIDEO_ID}.json <<EOF
-{
-  "lesson_id": "\${LESSON_ID}",
-  "video_id": "\${VIDEO_ID}",
-  "generated_at": "\$(date -Iseconds)",
-  "duration_sec": 30,
-  "format": "mp4",
-  "resolution": "1280x720",
-  "file_size": \$(stat -f%z ./videos/\${LESSON_ID}_\${VIDEO_ID}.mp4 2>/dev/null || stat -c%s ./videos/\${LESSON_ID}_\${VIDEO_ID}.mp4)
-}
-EOF
-
-# 7. Commit and push
-git config user.name "OpenHands"
-git config user.email "openhand@smrtr.ai"
-git add videos/\${LESSON_ID}_\${VIDEO_ID}.*
-git commit -m "Add video for lesson \${LESSON_ID} (video \${VIDEO_ID})"
-git push
-
-# 8. Verify upload
-echo ""
-echo "✓✓✓ VIDEO UPLOADED TO GITHUB ✓✓✓"
-echo "Video ID: \${VIDEO_ID}"
-echo "Lesson ID: \${LESSON_ID}"
-echo "GitHub Path: videos/\${LESSON_ID}_\${VIDEO_ID}.mp4"
-echo "Raw URL: https://raw.githubusercontent.com/Yknld/video-artifacts/main/videos/\${LESSON_ID}_\${VIDEO_ID}.mp4"
-echo ""
-
-IMPORTANT: The video MUST be uploaded to GitHub before you finish. This is not optional.
+- Do not print or store API keys. narration.json must not contain secrets.
+${uploadSection}
 
 BEGIN NOW.`;
 
@@ -795,17 +688,17 @@ async function downloadVideoFromArtifacts(
 }
 
 serve(async (req: Request) => {
-  // Handle CORS preflight
+  // Handle CORS preflight – must return 2xx so browser allows the actual request
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { status: 200, headers: corsHeaders });
   }
 
   const requestId = crypto.randomUUID();
   console.log(`[${requestId}] lesson_generate_video invoked`);
 
   try {
-    // Create service role client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    // Create service role client (single declaration to avoid duplicate-identifier after bundling)
+    const supabaseBaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const geminiApiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
     const openhandApiKey = Deno.env.get("OPENHAND_API_KEY") ?? "";
@@ -825,7 +718,7 @@ serve(async (req: Request) => {
       );
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseAdmin = createClient(supabaseBaseUrl, supabaseServiceKey);
 
     // Get authorization header
     const authHeader = req.headers.get("Authorization");
@@ -958,16 +851,12 @@ serve(async (req: Request) => {
     // For now, we'll use empty string and let OpenHand generate a placeholder
     const userAvatar = "";
 
-    // Step 2b: Generate video ID upfront (needed for GitHub upload)
+    // Step 2b: Generate video ID and one-time upload token (for CLI upload; no anon key in prompt)
     const videoId = crypto.randomUUID();
-    
-    // Step 2c: Get GitHub token for video uploads
-    const githubToken = Deno.env.get("GITHUB_TOKEN");
-    if (!githubToken) {
-      console.warn(`[${requestId}] GITHUB_TOKEN not set - video upload to GitHub will fail`);
-    }
+    const uploadToken = crypto.randomUUID();
+    const uploadUrl = supabaseBaseUrl.replace(/\/$/, "") + "/functions/v1/lesson_video_upload";
 
-    // Step 3: Build OpenHand prompt (includes GitHub upload instructions)
+    // Step 3: Build OpenHand prompt (includes curl to upload video directly to lesson)
     const remotionPrompt = loadRemotionPrompt(
       storyJSON,
       geminiApiKey,
@@ -975,7 +864,8 @@ serve(async (req: Request) => {
       aspect_ratios,
       lesson_id,
       videoId,
-      githubToken
+      uploadUrl,
+      uploadToken
     );
 
     // Step 4: Start OpenHand conversation
@@ -985,10 +875,8 @@ serve(async (req: Request) => {
       requestId
     );
 
-    // Step 5: Create video record in database (status: generating)
-    // Note: storage_path is NULL initially, will be set by polling service
-    const githubPath = `videos/${lesson_id}_${videoId}.mp4`;
-    
+    // Step 5: Create video record with upload token (agent will POST to lesson_video_upload when done)
+    const durationMs = Math.round((storyJSON.meta.durationSec ?? 120) * 1000);
     const { error: insertError } = await supabaseAdmin
       .from("lesson_assets")
       .insert({
@@ -997,13 +885,12 @@ serve(async (req: Request) => {
         user_id: user.id,
         kind: "video",
         storage_bucket: "lesson-assets",
-        storage_path: null, // Will be set by video_poll_github function
+        storage_path: null,
         mime_type: "video/mp4",
-        duration_ms: 30000, // 30 seconds
-        conversation_id: conversationId, // For polling OpenHand status
+        duration_ms: durationMs,
+        conversation_id: conversationId,
         metadata: {
-          github_path: githubPath,
-          github_url: `https://raw.githubusercontent.com/Yknld/video-artifacts/main/${githubPath}`,
+          upload_token: uploadToken,
           started_at: new Date().toISOString(),
         },
       });
@@ -1013,12 +900,9 @@ serve(async (req: Request) => {
       // Continue anyway - we'll try to create it later
     }
 
-    // Step 6: Return immediately - polling service will handle the rest
-    // The video_poll_github edge function will check OpenHand status and GitHub
-    // When conversation is complete and video is found, it will download and upload to Supabase storage
+    // Step 6: Return immediately; agent will upload via curl to lesson_video_upload when done; poller is fallback
     console.log(`[${requestId}] Video generation started successfully`);
-    console.log(`[${requestId}] OpenHand will upload to: ${githubPath}`);
-    console.log(`[${requestId}] Polling service will check OpenHand status and GitHub`);
+    console.log(`[${requestId}] Agent will upload to lesson via lesson_video_upload when render completes; poller is fallback`);
 
     // Return immediately with generating status
     return new Response(
@@ -1027,8 +911,6 @@ serve(async (req: Request) => {
         video_id: videoId,
         status: "generating",
         conversation_id: conversationId,
-        github_path: githubPath,
-        github_url: `https://raw.githubusercontent.com/Yknld/video-artifacts/main/${githubPath}`,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

@@ -12,7 +12,7 @@ Upgrade the AI Tutor to support:
 ## 1. Gemini Model Options (January 2026)
 
 ### Current Model
-- **gemini-2.0-flash** ✅ (already in use)
+- **gemini-3-flash-preview** ✅ (already in use)
 - Fast, multimodal, cost-effective
 - Best for production use
 
@@ -24,13 +24,13 @@ Upgrade the AI Tutor to support:
 - Good for complex educational questions
 - **Trade-off**: Higher latency, may hit rate limits
 
-#### Option B: gemini-2.0-flash-exp  
+#### Option B: gemini-3-flash-preview  
 - Experimental features + flash speed
 - Balance between speed and capabilities
 - Multimodal support (text, images, audio)
 
 #### Recommendation
-**Keep gemini-2.0-flash** for now - it's stable, fast, and already multimodal. Add image/audio support without changing the model.
+**Keep gemini-3-flash-preview** for now - it's stable, fast, and already multimodal. Add image/audio support without changing the model.
 
 ---
 

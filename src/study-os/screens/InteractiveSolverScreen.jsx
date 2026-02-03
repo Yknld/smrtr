@@ -97,50 +97,56 @@ export default function InteractiveSolverScreen() {
           return
         }
 
+        // Dev: same-origin /solver from Vite. Production: prefer same-origin /solver (built into dist) so assets load; SOLVER_VIEWER_URL override if set.
+        const sameOriginSolver = typeof window !== 'undefined' ? `${window.location.origin}/solver/solver.html` : ''
         const directUrl = USE_PROXY
           ? `${typeof window !== 'undefined' ? window.location.origin : ''}/solver/solver.html?lesson_id=${encodeURIComponent(lessonId)}`
           : (() => {
               const viewerUrl = (SOLVER_VIEWER_URL || '').trim()
-              if (!viewerUrl) {
+              const base = sameOriginSolver || viewerUrl
+              if (!base) {
                 setError('Solver viewer URL not configured.')
                 setContentUrl(null)
                 setSrcdocHtml(null)
                 setLoading(false)
                 return null
               }
-              const sep = viewerUrl.includes('?') ? '&' : '?'
-              return `${viewerUrl}${sep}lesson_id=${encodeURIComponent(lessonId)}`
+              const sep = base.includes('?') ? '&' : '?'
+              return `${base}${sep}lesson_id=${encodeURIComponent(lessonId)}`
             })()
         if (directUrl === null) return
         setError(null)
         setContentUrl(directUrl)
 
-        // In dev we serve /solver from disk: use iframe src so scripts and styles load from real URL; auth via postMessage.
-        // In production we fetch HTML, inject auth, and use srcdoc (or src if fetch fails).
+        // In dev we serve /solver from disk: use iframe src; auth via postMessage.
+        // In production with same-origin: use iframe src (solver built into dist). With SOLVER_VIEWER_URL: optionally fetch + srcdoc.
         if (USE_PROXY) {
           setSrcdocHtml(null)
         } else {
-          // No proxy (e.g. production): try to fetch from viewer URL; CORS may block
           const viewerUrl = (SOLVER_VIEWER_URL || '').trim()
-          const withoutQuery = viewerUrl.split('?')[0]
-          const lastSlash = withoutQuery.lastIndexOf('/')
-          const baseUrl = lastSlash === -1 ? withoutQuery : withoutQuery.slice(0, lastSlash + 1)
-          const htmlUrl = baseUrl ? `${baseUrl}solver.html` : withoutQuery
-          try {
-            const htmlRes = await fetch(htmlUrl, { cache: 'no-store' })
-            if (cancelled) return
-            if (!htmlRes.ok) {
+          if (viewerUrl) {
+            const withoutQuery = viewerUrl.split('?')[0]
+            const lastSlash = withoutQuery.lastIndexOf('/')
+            const baseUrl = lastSlash === -1 ? withoutQuery : withoutQuery.slice(0, lastSlash + 1)
+            const htmlUrl = baseUrl ? `${baseUrl}solver.html` : withoutQuery
+            try {
+              const htmlRes = await fetch(htmlUrl, { cache: 'no-store' })
+              if (cancelled) return
+              if (!htmlRes.ok) {
+                setSrcdocHtml(null)
+                setLoading(false)
+                return
+              }
+              let html = await htmlRes.text()
+              if (cancelled) return
+              const authScript = `<script>(function(){window.__SUPABASE_TOKEN__=${JSON.stringify(session.access_token)};window.__SUPABASE_URL__=${JSON.stringify(SUPABASE_URL)};window.__LESSON_ID__=${JSON.stringify(lessonId)};${typeof import.meta?.env?.VITE_GEMINI_API_KEY === 'string' && import.meta.env.VITE_GEMINI_API_KEY.trim() ? `window.__GEMINI_API_KEY__=${JSON.stringify(import.meta.env.VITE_GEMINI_API_KEY.trim())};` : ''}})();<\/script>`
+              const baseTag = baseUrl ? `<base href="${baseUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">` : ''
+              html = html.replace(/<head\s*>/i, '<head>' + baseTag + authScript)
+              setSrcdocHtml(html)
+            } catch (_) {
               setSrcdocHtml(null)
-              setLoading(false)
-              return
             }
-            let html = await htmlRes.text()
-            if (cancelled) return
-            const authScript = `<script>(function(){window.__SUPABASE_TOKEN__=${JSON.stringify(session.access_token)};window.__SUPABASE_URL__=${JSON.stringify(SUPABASE_URL)};window.__LESSON_ID__=${JSON.stringify(lessonId)};})();<\/script>`
-            const baseTag = baseUrl ? `<base href="${baseUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">` : ''
-            html = html.replace(/<head\s*>/i, '<head>' + baseTag + authScript)
-            setSrcdocHtml(html)
-          } catch (_) {
+          } else {
             setSrcdocHtml(null)
           }
         }
@@ -157,6 +163,8 @@ export default function InteractiveSolverScreen() {
     return () => { cancelled = true }
   }, [lessonId, stateSolverUrl])
 
+  const geminiApiKey = typeof import.meta?.env?.VITE_GEMINI_API_KEY === 'string' ? import.meta.env.VITE_GEMINI_API_KEY.trim() : ''
+
   const handleIframeLoad = () => {
     setIframeLoaded(true)
     if (srcdocHtml) return
@@ -164,10 +172,9 @@ export default function InteractiveSolverScreen() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.access_token) return
       try {
-        iframeRef.current.contentWindow.postMessage(
-          { type: 'auth', token: session.access_token, url: SUPABASE_URL, lessonId: lessonId || '' },
-          '*'
-        )
+        const payload = { type: 'auth', token: session.access_token, url: SUPABASE_URL, lessonId: lessonId || '' }
+        if (geminiApiKey) payload.geminiApiKey = geminiApiKey
+        iframeRef.current.contentWindow.postMessage(payload, '*')
       } catch (_) {}
     })
   }
@@ -231,6 +238,15 @@ export default function InteractiveSolverScreen() {
             <p className="so-solver-placeholder-desc">
               Practice steps and interactive content will appear here when generated for this lesson.
             </p>
+            {lessonId && isValidUuid(lessonId) && (
+              <button
+                type="button"
+                className="so-solver-placeholder-back"
+                onClick={() => navigate(`/app/lesson/${lessonId}`, { state: { lessonTitle } })}
+              >
+                Back to Lesson
+              </button>
+            )}
           </div>
         </div>
       </div>

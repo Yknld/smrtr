@@ -61,77 +61,7 @@ Or load from an API:
 
 ## Data Structure
 
-The template expects `window.__LECTURE_DATA__` to follow this structure:
-
-```json
-{
-  "course": {
-    "name": "Course Name",
-    "pathBreadcrumbs": ["Home", "Course", "Lecture"]
-  },
-  "lecture": {
-    "number": 1,
-    "totalLectures": 10,
-    "title": "Lecture Title",
-    "topic": "Brief description",
-    "date": "2024-01-15",
-    "duration": "15 minutes",
-    "rating": 4.5
-  },
-  "video": {
-    "posterUrl": "path/to/poster.jpg",
-    "videoUrl": "path/to/video.mp4",
-    "chapters": [
-      {
-        "title": "Chapter Name",
-        "startTime": 0
-      }
-    ]
-  },
-  "notes": {
-    "keyTakeaways": [
-      "Takeaway 1",
-      "Takeaway 2"
-    ],
-    "concepts": [
-      {
-        "title": "Concept Title",
-        "plainExplanation": "Detailed explanation",
-        "bullets": ["Point 1", "Point 2"],
-        "example": "Example text",
-        "whyItMatters": "Why this matters"
-      }
-    ]
-  },
-  "diagram": {
-    "title": "Diagram Title",
-    "description": "Instructions for the diagram",
-    "labels": [
-      {
-        "name": "Label Name",
-        "desc": "Label description"
-      }
-    ]
-  },
-  "quiz": {
-    "question": "Quiz question?",
-    "options": [
-      {
-        "id": "A",
-        "text": "Option A"
-      }
-    ],
-    "answerId": "A",
-    "explanation": "Explanation of the answer"
-  },
-  "wrapUp": {
-    "summaryBullets": ["Summary point 1"],
-    "nextSteps": ["Next step 1"],
-    "ctaPrimary": "Next Lecture",
-    "ctaSecondary": "Review Weak Spots"
-  }
-}
-```
+The template expects `window.__LECTURE_DATA__` with top-level keys: `course`, `lecture`, `video`, `notes`, `diagram`, `quiz`, `wrapUp`. See `docs/` or the template source for the full schema.
 
 ## Sections
 

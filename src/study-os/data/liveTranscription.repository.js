@@ -119,6 +119,55 @@ export async function notesGet(lessonId) {
 }
 
 /**
+ * Rebuild lesson notes from all assets: clear notes then append each asset.
+ * Use this to backfill notes for assets uploaded before the feature, or to refresh.
+ */
+export async function notesSyncFromAssets(lessonId) {
+  if (!isValidUuid(lessonId)) throw new Error(DEMO_ID_MSG)
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const user = session?.user
+  if (!user) throw new Error('User not authenticated')
+
+  const { data: assetList } = await supabase
+    .from('lesson_assets')
+    .select('id')
+    .eq('lesson_id', lessonId)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+
+  if (!assetList?.length) return { synced: 0 }
+
+  await notesSetRaw(lessonId, '')
+  const url = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/notes_append_from_asset`
+  const headers = {
+    'Content-Type': 'application/json',
+    apikey: SUPABASE_ANON_KEY,
+    ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+  }
+  let synced = 0
+  let lastError = null
+  for (const asset of assetList) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ lesson_id: lessonId, asset_id: asset.id }),
+    })
+    if (res.ok) {
+      synced += 1
+    } else {
+      const errBody = await res.json().catch(() => ({}))
+      lastError = errBody?.error || `HTTP ${res.status}`
+    }
+  }
+  if (assetList.length > 0 && synced === 0 && lastError) {
+    throw new Error(lastError)
+  }
+  return { synced }
+}
+
+/**
  * Finalize notes (Edge Function notes_finalize).
  */
 export async function notesFinalize(lessonId) {

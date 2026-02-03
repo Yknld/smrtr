@@ -137,24 +137,43 @@ serve(async (req: Request) => {
 
     lessonTitle = lesson?.title || "Lesson";
 
-    // 1. Try to get summary from lesson_outputs
-    const { data: summaryOutput } = await supabaseClient
+    // 1. Prefer lesson notes (lesson_outputs type 'notes') – primary source for podcast content
+    const { data: notesOutput } = await supabaseClient
       .from("lesson_outputs")
-      .select("content_json")
+      .select("notes_final_text, notes_raw_text")
       .eq("lesson_id", episode.lesson_id)
-      .eq("type", "summary")
-      .eq("status", "ready")
-      .order("created_at", { ascending: false })
+      .eq("type", "notes")
+      .order("updated_at", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (summaryOutput?.content_json?.summary) {
-      context = summaryOutput.content_json.summary;
-      contextSource = "summary";
-      console.log(`[${requestId}] Using lesson summary as context`);
+    const notesText = (notesOutput?.notes_final_text || notesOutput?.notes_raw_text || "").trim();
+    if (notesText) {
+      context = notesText;
+      contextSource = "notes";
+      console.log(`[${requestId}] Using lesson notes as context (${notesText.length} chars)`);
     }
 
-    // 2. If no summary, try live transcript segments
+    // 2. If no notes, try summary from lesson_outputs
+    if (!context) {
+      const { data: summaryOutput } = await supabaseClient
+        .from("lesson_outputs")
+        .select("content_json")
+        .eq("lesson_id", episode.lesson_id)
+        .eq("type", "summary")
+        .eq("status", "ready")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (summaryOutput?.content_json?.summary) {
+        context = summaryOutput.content_json.summary;
+        contextSource = "summary";
+        console.log(`[${requestId}] Using lesson summary as context`);
+      }
+    }
+
+    // 3. If still no context, try live transcript segments
     if (!context) {
       const { data: sessions } = await supabaseClient
         .from("study_sessions")
@@ -178,11 +197,11 @@ serve(async (req: Request) => {
       }
     }
 
-    // 3. Fallback to just the lesson title
+    // 4. Fallback to lesson title only (avoid generic app content)
     if (!context) {
-      context = `This lesson is about: ${lessonTitle}`;
+      context = `This lesson is about: ${lessonTitle}. Focus only on this topic.`;
       contextSource = "title_only";
-      console.log(`[${requestId}] Using lesson title as context (no other content available)`);
+      console.log(`[${requestId}] Using lesson title as context (no notes/summary/transcript available)`);
     }
 
     // Cap context length
@@ -216,7 +235,7 @@ serve(async (req: Request) => {
     // Initialize Gemini - using Pro model for high-quality podcast scripts
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-pro",
+      model: "gemini-3-pro-preview",
       generationConfig: {
         maxOutputTokens: 8192,
         temperature: 0.8
@@ -240,6 +259,8 @@ ${lessonTitle}
 
 LESSON CONTEXT (notes, transcript, or summary):
 ${context}
+
+The script MUST be based ONLY on the lesson content above. Do NOT mention any app, platform, product, or brand. Focus strictly on the lesson topic and material.
 
 HOST ROLES (FIXED — DO NOT CHANGE)
 Speaker A (Host):

@@ -185,7 +185,7 @@ CREATE TABLE lesson_outputs (
 ## Dependencies
 
 ### External APIs
-- **Google Gemini API**: `gemini-2.0-flash-exp` model
+- **Google Gemini API**: `gemini-3-flash-preview` model
 - **Environment Variable**: `GEMINI_API_KEY`
 
 ### Supabase Services

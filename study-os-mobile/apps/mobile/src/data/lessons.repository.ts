@@ -193,3 +193,24 @@ export async function updateLessonTitle(
 
   return transformLesson(data as LessonRow);
 }
+
+/**
+ * Delete a lesson from Supabase (and related outputs/assets via DB CASCADE). Only the owning user can delete.
+ */
+export async function deleteLesson(lessonId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  const { error } = await supabase
+    .from('lessons')
+    .delete()
+    .eq('id', lessonId)
+    .eq('user_id', user.id);
+
+  if (error) {
+    throw new Error(`Failed to delete lesson: ${error.message}`);
+  }
+}

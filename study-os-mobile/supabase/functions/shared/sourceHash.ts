@@ -86,13 +86,12 @@ export async function gatherSourceInputs(
 ): Promise<SourceHashInputs> {
   const inputs: SourceHashInputs = { lesson_id };
   
-  // 1. Get notes from lesson_outputs (type='notes')
+  // 1. Get notes from lesson_outputs (type='notes') – include any row with content, not only status=ready
   const { data: notesOutput } = await supabase
     .from('lesson_outputs')
     .select('notes_final_text, notes_raw_text')
     .eq('lesson_id', lesson_id)
     .eq('type', 'notes')
-    .eq('status', 'ready')
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -8,6 +8,7 @@ import { Icon } from '../components/Icons'
 import {
   fetchPodcastEpisode,
   fetchPodcastSegments,
+  fetchPodcastSegmentReadyCount,
   createPodcastEpisode,
   generatePodcastScript,
   generatePodcastAudio,
@@ -42,11 +43,14 @@ export default function PodcastPlayerScreen() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [statusMessage, setStatusMessage] = useState('Loading...')
+  const [readyCount, setReadyCount] = useState(0) // during voicing: segments with tts_status=ready
 
   const audioRef = useRef(null)
   const pollRef = useRef(null)
+  const lastAudioTriggerRef = useRef(0)
+  const AUDIO_TRIGGER_INTERVAL_MS = 10000 // Re-call generatePodcastAudio every 10s while voicing (function checks in-flight jobs once per call)
 
-  const getStatusMessage = useCallback((ep) => {
+  const getStatusMessage = useCallback((ep, voiceReady = 0) => {
     if (!ep) return 'Loading...'
     switch (ep.status) {
       case 'queued':
@@ -54,7 +58,7 @@ export default function PodcastPlayerScreen() {
       case 'scripting':
         return 'Writing podcast dialogue...'
       case 'voicing':
-        return `Generating audio (${segments.length}/${ep.totalSegments || 0} segments)...`
+        return `Generating audio (${voiceReady ?? segments.length}/${ep.totalSegments || 0} segments)...`
       case 'ready':
         return 'Podcast ready'
       case 'failed':
@@ -63,6 +67,11 @@ export default function PodcastPlayerScreen() {
         return 'Processing...'
     }
   }, [segments.length])
+
+  // Keep status message in sync when episode/readyCount change during voicing
+  useEffect(() => {
+    if (episode?.status === 'voicing') setStatusMessage(getStatusMessage(episode, readyCount))
+  }, [episode, readyCount, getStatusMessage])
 
   // Load or create episode and poll until ready
   useEffect(() => {
@@ -103,14 +112,27 @@ export default function PodcastPlayerScreen() {
           const updated = await fetchPodcastEpisode(lessonId)
           if (cancelled || !updated) return
           setEpisode(updated)
-          setStatusMessage(getStatusMessage(updated))
           if (updated.status === 'ready') {
+            setReadyCount(0)
             stopPolling()
             await loadSegmentsAndUrls(updated)
           } else if (updated.status === 'failed') {
+            setReadyCount(0)
             stopPolling()
             setLoadError(updated.error || 'Podcast generation failed')
             setLoading(false)
+          } else if (updated.status === 'voicing') {
+            fetchPodcastSegmentReadyCount(updated.id).then((n) => {
+              if (!cancelled) setReadyCount(n)
+            })
+            setStatusMessage(getStatusMessage(updated, 0)) // useEffect will update when readyCount arrives
+            const now = Date.now()
+            if (now - lastAudioTriggerRef.current >= AUDIO_TRIGGER_INTERVAL_MS) {
+              lastAudioTriggerRef.current = now
+              generatePodcastAudio(epId).catch(() => {})
+            }
+          } else {
+            setStatusMessage(getStatusMessage(updated))
           }
         } catch (e) {
           if (!cancelled) setLoadError(e.message || 'Failed to load podcast')
@@ -138,6 +160,7 @@ export default function PodcastPlayerScreen() {
             return
           }
           if (ep.status === 'voicing' || ep.status === 'scripting') {
+            if (ep.status === 'voicing') fetchPodcastSegmentReadyCount(ep.id).then((n) => { if (!cancelled) setReadyCount(n) })
             pollUntilReady(ep.id)
             return
           }
@@ -176,6 +199,7 @@ export default function PodcastPlayerScreen() {
         if (cancelled) return
         ep = await fetchPodcastEpisode(lessonId)
         if (ep) setEpisode(ep)
+        setReadyCount(0)
         generatePodcastAudio(episodeId).catch(() => {})
         pollUntilReady(episodeId)
       } catch (e) {

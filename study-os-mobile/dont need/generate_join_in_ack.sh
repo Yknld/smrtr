@@ -4,7 +4,7 @@ set -e
 echo "🎙️ Generating pre-recorded join-in acknowledgment audio..."
 echo ""
 
-RUNPOD_API_KEY="${RUNPOD_API_KEY:-rpa_R5L7B0G1R6OEL9YWPK318IKDI2I9OPB28D3UWAJE19ya20}"
+RUNPOD_API_KEY="${RUNPOD_API_KEY:?Set RUNPOD_API_KEY in env}"
 ENDPOINT_ID="f1hyps48e61yf7"
 
 TEXT="Oh, we just got a call from a listener! Interesting question. Let me think about this for a moment..."

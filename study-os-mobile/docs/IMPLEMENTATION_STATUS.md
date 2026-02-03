@@ -57,7 +57,7 @@
 - ✅ Cache miss generates new flashcards
 - ✅ Structured JSON schema (deck_title, cards with id/front/back/tags/difficulty)
 - ✅ Metadata includes source_hash, version, count
-- ✅ Model tracking (gemini-2.0-flash-exp)
+- ✅ Model tracking (gemini-3-flash-preview)
 - ✅ Input validation (10-25 cards)
 - ✅ Error handling with detailed codes
 
@@ -87,7 +87,7 @@ Deployed Functions on project euxfugfzmpsemkjpcpuz: lesson_generate_flashcards
   "cached": false,
   "source_hash": "abc123...",
   "version": 1,
-  "model": "gemini-2.0-flash-exp",
+  "model": "gemini-3-flash-preview",
   "content_json": {
     "deck_title": "...",
     "cards": [...],
@@ -137,7 +137,7 @@ Deployed Functions on project euxfugfzmpsemkjpcpuz: lesson_generate_quiz
   "cached": false,
   "source_hash": "abc123...",
   "version": 1,
-  "model": "gemini-2.0-flash-exp",
+  "model": "gemini-3-flash-preview",
   "content_json": {
     "title": "...",
     "questions": [

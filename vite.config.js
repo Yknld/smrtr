@@ -3,13 +3,47 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
 
+/** Copy solver/ to dist/solver/ so production can serve it same-origin. */
+function copySolverToDist() {
+  return {
+    name: 'copy-solver',
+    closeBundle() {
+      const outDir = path.resolve(process.cwd(), 'dist')
+      const solverDir = path.resolve(process.cwd(), 'solver')
+      const destDir = path.join(outDir, 'solver')
+      if (!fs.existsSync(solverDir)) return
+      fs.mkdirSync(destDir, { recursive: true })
+      for (const name of ['solver.html', 'homework-app.js', 'homework-styles.css']) {
+        const src = path.join(solverDir, name)
+        const dest = path.join(destDir, name)
+        if (fs.existsSync(src)) fs.copyFileSync(src, dest)
+      }
+    },
+  }
+}
+
 const SOLVER_VIEWER_BASE =
   process.env.VITE_SOLVER_VIEWER_BASE ||
   'https://euxfugfzmpsemkjpcpuz.supabase.co/storage/v1/object/public/solver'
 
+const SUPABASE_URL =
+  process.env.VITE_SUPABASE_URL || 'https://euxfugfzmpsemkjpcpuz.supabase.co'
+
 export default defineConfig({
+  server: {
+    proxy: {
+      // Avoid CORS for Edge Functions in dev: browser hits same-origin, Vite proxies to Supabase.
+      '/supabase-functions': {
+        target: SUPABASE_URL,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/supabase-functions/, '/functions/v1'),
+        secure: true,
+      },
+    },
+  },
   plugins: [
     react(),
+    copySolverToDist(),
     {
       name: 'solver-static',
       configureServer(server) {

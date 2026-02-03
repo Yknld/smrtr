@@ -4,9 +4,13 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { fetchLessons, createLesson, deleteLesson } from '../data/lessons.repository'
-import * as coursesRepo from '../data/courses.repository'
-import { isValidUuid } from '../utils/uuid'
+import { supabase } from '../config/supabase'
 import LessonCard from '../components/LessonCard'
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+function isValidUuid(str) {
+  return typeof str === 'string' && UUID_REGEX.test(str)
+}
 import LoadingState from '../components/LoadingState'
 import EmptyState from '../components/EmptyState'
 import FAB from '../components/FAB'
@@ -84,7 +88,10 @@ export default function CourseDetailScreen() {
     if (!window.confirm(`Delete course "${courseTitle}"? All lessons in this course will be removed.`)) return
     setDeleting(true)
     try {
-      await coursesRepo.deleteCourse(courseId)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+      const { error } = await supabase.from('courses').delete().eq('id', courseId).eq('user_id', user.id)
+      if (error) throw new Error(`Failed to delete course: ${error.message}`)
       navigate('/app', { replace: true })
     } catch (e) {
       console.error('Failed to delete course:', e?.message)

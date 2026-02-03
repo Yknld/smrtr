@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Icon } from '../components/Icons'
+import { MathText } from '../components/MathText'
 import { fetchFlashcards, generateFlashcards } from '../data/lessonOutputs.repository'
 import { getFlashcards } from '../data/mock'
 import './screens.css'
@@ -134,11 +135,11 @@ export default function FlashcardsScreen() {
             >
               <div className="so-flashcard-face so-flashcard-face-front">
                 <span className="so-flashcard-label">Front</span>
-                <p className="so-flashcard-text">{card.front}</p>
+                <p className="so-flashcard-text"><MathText text={card.front} /></p>
               </div>
               <div className="so-flashcard-face so-flashcard-face-back">
                 <span className="so-flashcard-label">Back</span>
-                <p className="so-flashcard-text">{card.back}</p>
+                <p className="so-flashcard-text"><MathText text={card.back} /></p>
               </div>
             </button>
           </div>

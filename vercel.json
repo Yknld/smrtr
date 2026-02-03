@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/solver/:path*", "destination": "/solver/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

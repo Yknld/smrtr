@@ -91,14 +91,14 @@ export default function HomeScreen() {
   return (
     <div className="so-screen">
       <header className="so-home-header">
-        <span className="so-home-header-spacer" />
+        <h1 className="so-home-title">Smartr</h1>
         <div className="so-home-header-actions">
           <button
             type="button"
             className="so-home-header-btn"
-            onClick={() => navigate('/app/settings/profile')}
-            aria-label="Profile"
-            title="Profile"
+            onClick={() => navigate('/app/settings')}
+            aria-label="Settings"
+            title="Settings"
           >
             <Icon name="person" size={22} />
           </button>

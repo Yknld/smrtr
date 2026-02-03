@@ -1,8 +1,8 @@
 /**
  * Interactive Solver – same flow as study-os-mobile InteractiveSolverScreen:
  * 1. Check interactive_module_get for lesson.
- * 2. Dev: iframe src=/solver/solver.html?lesson_id=... (scripts/styles from real URL); auth via postMessage.
- * 3. Production: fetch HTML from viewer URL, inject auth, render via iframe srcdoc (or src if fetch fails).
+ * 2. Always use iframe src (same-origin /solver in dev, same-origin or SOLVER_VIEWER_URL in prod). Auth + Gemini key via postMessage on load.
+ *    (Srcdoc with cross-origin base was removed: it triggered CSP and blocked assets.)
  */
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
@@ -118,38 +118,9 @@ export default function InteractiveSolverScreen() {
         setError(null)
         setContentUrl(directUrl)
 
-        // In dev we serve /solver from disk: use iframe src; auth via postMessage.
-        // In production with same-origin: use iframe src (solver built into dist). With SOLVER_VIEWER_URL: optionally fetch + srcdoc.
-        if (USE_PROXY) {
-          setSrcdocHtml(null)
-        } else {
-          const viewerUrl = (SOLVER_VIEWER_URL || '').trim()
-          if (viewerUrl) {
-            const withoutQuery = viewerUrl.split('?')[0]
-            const lastSlash = withoutQuery.lastIndexOf('/')
-            const baseUrl = lastSlash === -1 ? withoutQuery : withoutQuery.slice(0, lastSlash + 1)
-            const htmlUrl = baseUrl ? `${baseUrl}solver.html` : withoutQuery
-            try {
-              const htmlRes = await fetch(htmlUrl, { cache: 'no-store' })
-              if (cancelled) return
-              if (!htmlRes.ok) {
-                setSrcdocHtml(null)
-                setLoading(false)
-                return
-              }
-              let html = await htmlRes.text()
-              if (cancelled) return
-              const authScript = `<script>(function(){window.__SUPABASE_TOKEN__=${JSON.stringify(session.access_token)};window.__SUPABASE_URL__=${JSON.stringify(SUPABASE_URL)};window.__LESSON_ID__=${JSON.stringify(lessonId)};${typeof import.meta?.env?.VITE_GEMINI_API_KEY === 'string' && import.meta.env.VITE_GEMINI_API_KEY.trim() ? `window.__GEMINI_API_KEY__=${JSON.stringify(import.meta.env.VITE_GEMINI_API_KEY.trim())};` : ''}})();<\/script>`
-              const baseTag = baseUrl ? `<base href="${baseUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">` : ''
-              html = html.replace(/<head\s*>/i, '<head>' + baseTag + authScript)
-              setSrcdocHtml(html)
-            } catch (_) {
-              setSrcdocHtml(null)
-            }
-          } else {
-            setSrcdocHtml(null)
-          }
-        }
+        // Always use iframe src (never srcdoc). Srcdoc with cross-origin base triggers CSP and blocks assets.
+        // Auth and Gemini key are sent via postMessage in handleIframeLoad.
+        setSrcdocHtml(null)
       } catch (e) {
         if (!cancelled) {
           setError(e?.message || 'Failed to load interactive content.')
@@ -272,7 +243,7 @@ export default function InteractiveSolverScreen() {
               title="Interactive content"
               className="so-solver-iframe"
               onLoad={handleIframeLoad}
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts allow-same-origin allow-modals"
             />
           ) : (
             <iframe
@@ -281,7 +252,7 @@ export default function InteractiveSolverScreen() {
               title="Interactive content"
               className="so-solver-iframe"
               onLoad={handleIframeLoad}
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts allow-same-origin allow-modals"
             />
           )}
           {!iframeLoaded && (

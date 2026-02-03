@@ -15,6 +15,25 @@
 
         // Question state tracking (stores progress for each question)
         let questionStates = {};
+
+        // Wait for MathJax to be ready (script loads async; on production it can load after content)
+        function waitForMathJax(maxMs) {
+            maxMs = maxMs || 8000;
+            const start = Date.now();
+            return new Promise(function (resolve) {
+                function check() {
+                    if (window.MathJax && window.MathJax.typesetPromise) {
+                        return resolve();
+                    }
+                    if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+                        return window.MathJax.startup.promise.then(resolve).catch(resolve);
+                    }
+                    if (Date.now() - start >= maxMs) return resolve();
+                    setTimeout(check, 150);
+                }
+                check();
+            });
+        }
         
         // Component export system for evaluation pipeline
         const exportedComponents = [];
@@ -863,23 +882,14 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 const problemText = data.problem.text || "Problem description will appear here.";
                 problemTextEl.innerHTML = ensureHtml(problemText);
                 
-                // Trigger MathJax to render the math (with small delay to ensure ready)
-                setTimeout(() => {
+                // Wait for MathJax (loads async from CDN; can be late on production) then render math
+                waitForMathJax(8000).then(() => {
                     if (window.MathJax && window.MathJax.typesetPromise) {
                         window.MathJax.typesetPromise([problemTextEl]).catch(err => {
                             console.warn('MathJax typeset error:', err);
                         });
-                    } else if (window.MathJax && window.MathJax.startup) {
-                        // MathJax still loading, wait for it
-                        window.MathJax.startup.promise.then(() => {
-                            if (window.MathJax.typesetPromise) {
-                                window.MathJax.typesetPromise([problemTextEl]).catch(err => {
-                                    console.warn('MathJax typeset error:', err);
-                                });
-                            }
-                        });
                     }
-                }, 100);
+                });
                 
                 // Handle problem image
                 const problemImage = document.getElementById('problem-image');
@@ -1565,31 +1575,14 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 stepExplanation.id = `step-explanation-${index}`;
                 // Process markdown bold formatting (reuse explanationText from above)
                 stepExplanation.innerHTML = processMarkdownBold(explanationText || 'No explanation provided.');
-                // Trigger MathJax to render math notation
-                const renderMath = () => {
+                // Wait for MathJax (async from CDN; often late on production) then render math
+                waitForMathJax(8000).then(() => {
                     if (window.MathJax && window.MathJax.typesetPromise) {
                         window.MathJax.typesetPromise([stepExplanation]).catch((err) => {
                             console.log('MathJax rendering error:', err);
                         });
-                    } else if (window.MathJax && window.MathJax.startup) {
-                        // MathJax is still loading, wait for it
-                        window.MathJax.startup.promise.then(() => {
-                            if (window.MathJax.typesetPromise) {
-                                window.MathJax.typesetPromise([stepExplanation]).catch((err) => {
-                                    console.log('MathJax rendering error:', err);
-                                });
-                            }
-                        });
                     }
-                };
-                // Try immediately, or wait for MathJax to load
-                if (document.readyState === 'complete') {
-                    renderMath();
-                } else {
-                    window.addEventListener('load', renderMath);
-                    // Also try after a short delay
-                    setTimeout(renderMath, 500);
-                }
+                });
 
                 // Create input section
                 const isStepCompleted = savedState && savedState.completedSteps && savedState.completedSteps[index];
@@ -1649,8 +1642,8 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                     }
                 }
                 
-                // Trigger MathJax to render math in the label
-                setTimeout(() => {
+                // Render math in the label once MathJax is ready
+                waitForMathJax(8000).then(() => {
                     if (window.MathJax && window.MathJax.typesetPromise) {
                         const label = stepInputSection.querySelector('.step-input-label');
                         if (label) {
@@ -1659,7 +1652,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                             });
                         }
                     }
-                }, 200 + (index * 50));
+                });
 
                 // Create visualization container wrapper
                 const vizWrapper = document.createElement('div');
@@ -1740,6 +1733,11 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                         if (vizEl) {
                             console.log(`✅ [renderSteps] Loading PRE-GENERATED SVG for step ${index}`);
                             vizEl.innerHTML = step.visualization;
+                            waitForMathJax(8000).then(() => {
+                                if (window.MathJax && window.MathJax.typesetPromise) {
+                                    window.MathJax.typesetPromise([vizEl]).catch(function (err) { console.warn('MathJax viz error:', err); });
+                                }
+                            });
                         }
                     }, 100 + (index * 50));
                 }
@@ -3825,22 +3823,15 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                 explanationEl.innerHTML = htmlContent;
                 // Trigger MathJax to render math notation
                 const renderMath = () => {
-                    if (window.MathJax && window.MathJax.typesetPromise) {
-                        window.MathJax.typesetPromise([explanationEl]).catch((err) => {
-                            console.log('MathJax rendering error:', err);
-                        });
-                    } else if (window.MathJax && window.MathJax.startup) {
-                        window.MathJax.startup.promise.then(() => {
-                            if (window.MathJax.typesetPromise) {
-                                window.MathJax.typesetPromise([explanationEl]).catch((err) => {
-                                    console.log('MathJax rendering error:', err);
-                                });
-                            }
-                        });
-                    }
+                    waitForMathJax(8000).then(() => {
+                        if (window.MathJax && window.MathJax.typesetPromise) {
+                            window.MathJax.typesetPromise([explanationEl]).catch((err) => {
+                                console.log('MathJax rendering error:', err);
+                            });
+                        }
+                    });
                 };
-                // Small delay to ensure DOM is updated
-                setTimeout(renderMath, 100);
+                setTimeout(renderMath, 50);
             }
         }
 
@@ -4346,8 +4337,8 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                     }
                 };
 
-                // Use streaming endpoint; alt=sse returns Server-Sent Events (data: {...}\n)
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?key=${this.apiKey}&alt=sse`;
+                // Use streaming endpoint (NDJSON: one JSON object per line; no alt=sse to avoid SSE framing)
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?key=${this.apiKey}`;
                 
                 return fetch(url, {
                     method: 'POST',
@@ -4471,10 +4462,13 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                         }
                     }
 
-                    // Finalize - only throw error if we received data but no text
+                    // Finalize - if we got data but no text, might be wrong stream format (e.g. trailing ]); trigger fallback
                     if (hasReceivedData && !fullText) {
-                        console.error('Received data but no text extracted. Buffer:', buffer.substring(0, 500));
-                        // Throw error to trigger fallback
+                        const buf = buffer.trim();
+                        const isTrailingOnly = /^[\]\s,]*$/.test(buf) || buf.length < 10;
+                        if (!isTrailingOnly) {
+                            console.error('Received data but no text extracted. Buffer:', buffer.substring(0, 500));
+                        }
                         throw new Error('No response received from API');
                     }
 
@@ -4793,6 +4787,8 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                 console.log('No message, returning early');
                 return;
             }
+            // Resolve key once for entire function (fallback block uses this)
+            const apiKey = getGeminiApiKey();
             
             // Clear input after getting the message
             chatbotInput.value = '';
@@ -4855,8 +4851,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                 }
             }
 
-            // Fallback to standard API (or use if live client not available) – use getGeminiApiKey() so postMessage-injected key is used
-            const apiKey = getGeminiApiKey();
+            // Fallback to standard API (or use if live client not available)
             if (!apiKey) {
                 addMessage('Please set your Gemini API key (in host app env VITE_GEMINI_API_KEY or meta tag).', false);
                 chatbotSend.disabled = false;
@@ -4888,6 +4883,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                     const botResponse = data.candidates[0].content.parts[0].text;
                     addMessage(botResponse, false);
                     conversationHistory.push({ role: 'model', parts: [{ text: botResponse }] });
+                    updateChatbotStatus('offline', 'Ready');
                 } else {
                     addMessage('Sorry, I encountered an error. Please try again.', false);
                 }

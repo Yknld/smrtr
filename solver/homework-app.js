@@ -1470,12 +1470,23 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
         }
 
         // Render steps dynamically
+        /** Unescape literal \\n and \\* from API/JSON, then convert newlines/bullets for HTML. */
+        function processStepExplanation(text) {
+            if (!text || typeof text !== 'string') return text;
+            let s = text;
+            // Literal backslash-n and backslash-asterisk (from JSON/API) -> real newline and *
+            s = s.replace(/\\n/g, '\n').replace(/\\\*/g, '*');
+            // Newlines -> <br> so they display in HTML
+            s = s.replace(/\n/g, '<br>\n');
+            // Optional: lines that start with * or - (markdown bullets) -> wrap in list for readability
+            s = s.replace(/(<br>\n)([\s]*)[*\-]\s+([^<\n]+)/g, '$1$2• $3');
+            return processMarkdownBold(s);
+        }
         // Convert markdown-style bold (**text**) to HTML bold
         function processMarkdownBold(text) {
             if (!text) return text;
             // Convert **text** to <strong>text</strong>
             // Match **text** but avoid matching within HTML tags or MathJax delimiters
-            // Use a more robust regex that handles multiple bold sections
             return text.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
         }
 
@@ -1574,7 +1585,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 stepExplanation.className = 'step-explanation';
                 stepExplanation.id = `step-explanation-${index}`;
                 // Process markdown bold formatting (reuse explanationText from above)
-                stepExplanation.innerHTML = processMarkdownBold(explanationText || 'No explanation provided.');
+                stepExplanation.innerHTML = processStepExplanation(explanationText || 'No explanation provided.');
                 // Wait for MathJax (async from CDN; often late on production) then render math
                 waitForMathJax(8000).then(() => {
                     if (window.MathJax && window.MathJax.typesetPromise) {
@@ -1981,29 +1992,33 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
             });
         }
 
-        // Attach resources button handlers
+        // Attach resources button handlers (delegation is done in document listener below)
         function attachResourcesHandlers() {
-            document.querySelectorAll('.step-resources-button').forEach(btn => {
-                btn.addEventListener('click', handleResourcesClick);
-            });
+            // Handlers attached via document-level delegation so "Feeling stuck?" works when embedded
         }
 
-        // Handle resources button click
+        // Handle resources button click (event delegation so it works for dynamically added buttons)
         async function handleResourcesClick(e) {
-            const stepIndex = parseInt(e.target.closest('.step-resources-button').getAttribute('data-step-index'));
-            const step = homeworkData.steps[stepIndex];
-            
+            const button = e.target.closest('.step-resources-button');
+            if (!button) return;
+            e.preventDefault();
+            const stepIndex = parseInt(button.getAttribute('data-step-index'), 10);
+            if (isNaN(stepIndex)) return;
+            const step = homeworkData && homeworkData.steps && homeworkData.steps[stepIndex];
             if (!step) {
                 console.error('Step not found:', stepIndex);
                 return;
             }
 
-            // Show modal
             const modal = document.getElementById('resources-modal');
             const modalBody = document.getElementById('resources-modal-body');
             const modalTitle = document.getElementById('resources-modal-title');
+            if (!modal || !modalBody || !modalTitle) {
+                console.error('Resources modal elements not found. Ensure index.html includes #resources-modal.');
+                return;
+            }
+
             const resourcesButton = document.getElementById(`step-resources-${stepIndex}`);
-            
             modal.classList.add('active');
             modalTitle.textContent = `Learning Resources - Step ${stepIndex + 1}`;
 
@@ -2020,7 +2035,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
 
             // If not cached, show loading and fetch
             modalBody.innerHTML = '<div class="resources-loading">Finding relevant YouTube videos...</div>';
-            resourcesButton.classList.add('loading');
+            if (resourcesButton) resourcesButton.classList.add('loading');
 
             try {
                 // Fetch YouTube videos for this step
@@ -2039,7 +2054,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 console.error('Error fetching resources:', error);
                 modalBody.innerHTML = `<div class="resources-error">Error loading resources: ${error.message}</div>`;
             } finally {
-                resourcesButton.classList.remove('loading');
+                if (resourcesButton) resourcesButton.classList.remove('loading');
             }
         }
 
@@ -3866,7 +3881,12 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
         const audioStates = new Map(); // Track audio state per step
         const audioElements = new Map(); // Store audio elements per step
 
+        // Feeling stuck? — open resources modal (delegated so it works when embedded / dynamic steps)
         document.addEventListener('click', async (e) => {
+            if (e.target.closest('.step-resources-button')) {
+                await handleResourcesClick(e);
+                return;
+            }
             if (e.target.closest('.step-microphone-button')) {
                 const button = e.target.closest('.step-microphone-button');
                 const stepIndex = parseInt(button.getAttribute('data-step-index'));

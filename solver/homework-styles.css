@@ -971,7 +971,8 @@ body {
     overflow-y: auto;
 }
 
-.resources-modal.open {
+.resources-modal.open,
+.resources-modal.active {
     display: flex;
     align-items: center;
     justify-content: center;

@@ -115,6 +115,7 @@
                 if (d && d.type === 'auth' && d.token && d.url) {
                     window.__SUPABASE_TOKEN__ = d.token;
                     window.__SUPABASE_URL__ = (d.url || '').replace(/\/$/, '');
+                    if (d.anonKey) window.__SUPABASE_ANON_KEY__ = d.anonKey;
                     if (d.lessonId) window.__LESSON_ID__ = d.lessonId;
                     if (typeof d.geminiApiKey === 'string' && d.geminiApiKey.trim()) {
                         window.__GEMINI_API_KEY__ = d.geminiApiKey.trim();

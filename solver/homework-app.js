@@ -2163,9 +2163,8 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                             console.error(`🎥 [YOUTUBE] Error response:`, errorText);
                             
                             if (response.status === 401) {
-                                console.error(`🎥 [YOUTUBE] 🔐 AUTHENTICATION ERROR: Function requires user authentication`);
-                                console.error(`🎥 [YOUTUBE] 🔐 This function is designed for lessons (requires user JWT), not steps`);
-                                console.error(`🎥 [YOUTUBE] 🔐 Solution: Create a new Edge Function that accepts topic/contentContext without user auth`);
+                                console.error(`🎥 [YOUTUBE] 🔐 AUTHENTICATION ERROR: Invalid JWT or missing Supabase anon key`);
+                                console.error(`🎥 [YOUTUBE] 🔐 Ensure the host sends anonKey in postMessage auth, or set meta name="supabase-anon-key"`);
                             }
                             
                             if (response.status === 404) {
@@ -3928,13 +3927,14 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
         // The edge function URL will be: ${SUPABASE_URL}/functions/v1/tts
         
         // Get Supabase configuration: meta tags first, then window globals (set by host via postMessage)
+        // Prefer anon key for edge functions (e.g. youtube_step_recommendations) to avoid 401 Invalid JWT.
         function getSupabaseConfig() {
             const supabaseUrlMeta = document.querySelector('meta[name="supabase-url"]');
             const supabaseKeyMeta = document.querySelector('meta[name="supabase-anon-key"]');
             let supabaseUrl = supabaseUrlMeta ? (supabaseUrlMeta.getAttribute('content') || '').trim() : '';
             let supabaseKey = supabaseKeyMeta ? (supabaseKeyMeta.getAttribute('content') || '').trim() : '';
-            // Fallback: when embedded (e.g. Study OS), host sends url + token via postMessage -> window.__SUPABASE_URL__ / __SUPABASE_TOKEN__
             if (!supabaseUrl && typeof window.__SUPABASE_URL__ === 'string') supabaseUrl = (window.__SUPABASE_URL__ || '').replace(/\/$/, '');
+            if (!supabaseKey && typeof window.__SUPABASE_ANON_KEY__ === 'string') supabaseKey = (window.__SUPABASE_ANON_KEY__ || '').trim();
             if (!supabaseKey && typeof window.__SUPABASE_TOKEN__ === 'string') supabaseKey = (window.__SUPABASE_TOKEN__ || '').trim();
             if (supabaseKey) supabaseKey = supabaseKey.trim();
             // Log configuration for debugging

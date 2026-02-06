@@ -40,6 +40,7 @@ FUNCTIONS=(
   transcribe_start
   tutor_chat
   video_poll_github
+  youtube_step_recommendations
   test_flashcards_minimal
   test_no_validation
 )

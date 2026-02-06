@@ -106,6 +106,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.video_poll_github]
 verify_jwt = false
+[functions.youtube_step_recommendations]
+verify_jwt = false
 [functions.test_flashcards_minimal]
 verify_jwt = false
 [functions.test_no_validation]

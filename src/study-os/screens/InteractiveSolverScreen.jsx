@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Icon } from '../components/Icons'
-import { supabase, SUPABASE_URL, SOLVER_VIEWER_URL } from '../config/supabase'
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, SOLVER_VIEWER_URL } from '../config/supabase'
 import './screens.css'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -143,7 +143,7 @@ export default function InteractiveSolverScreen() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.access_token) return
       try {
-        const payload = { type: 'auth', token: session.access_token, url: SUPABASE_URL, lessonId: lessonId || '' }
+        const payload = { type: 'auth', token: session.access_token, url: SUPABASE_URL, lessonId: lessonId || '', anonKey: SUPABASE_ANON_KEY || '' }
         if (geminiApiKey) payload.geminiApiKey = geminiApiKey
         iframeRef.current.contentWindow.postMessage(payload, '*')
       } catch (_) {}

@@ -3927,34 +3927,21 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
         // Set SUPABASE_URL and SUPABASE_ANON_KEY from your Supabase project
         // The edge function URL will be: ${SUPABASE_URL}/functions/v1/tts
         
-        // Get Supabase configuration from meta tags or use defaults
+        // Get Supabase configuration: meta tags first, then window globals (set by host via postMessage)
         function getSupabaseConfig() {
             const supabaseUrlMeta = document.querySelector('meta[name="supabase-url"]');
             const supabaseKeyMeta = document.querySelector('meta[name="supabase-anon-key"]');
-            
-            const supabaseUrl = supabaseUrlMeta ? supabaseUrlMeta.getAttribute('content') : '';
-            let supabaseKey = supabaseKeyMeta ? supabaseKeyMeta.getAttribute('content') : '';
-            
-            // Trim any whitespace that might have been accidentally added
-            if (supabaseKey) {
-                supabaseKey = supabaseKey.trim();
-            }
-            
+            let supabaseUrl = supabaseUrlMeta ? (supabaseUrlMeta.getAttribute('content') || '').trim() : '';
+            let supabaseKey = supabaseKeyMeta ? (supabaseKeyMeta.getAttribute('content') || '').trim() : '';
+            // Fallback: when embedded (e.g. Study OS), host sends url + token via postMessage -> window.__SUPABASE_URL__ / __SUPABASE_TOKEN__
+            if (!supabaseUrl && typeof window.__SUPABASE_URL__ === 'string') supabaseUrl = (window.__SUPABASE_URL__ || '').replace(/\/$/, '');
+            if (!supabaseKey && typeof window.__SUPABASE_TOKEN__ === 'string') supabaseKey = (window.__SUPABASE_TOKEN__ || '').trim();
+            if (supabaseKey) supabaseKey = supabaseKey.trim();
             // Log configuration for debugging
             console.log('🎥 [YOUTUBE] Config check - URL:', supabaseUrl ? 'Present' : 'MISSING');
             console.log('🎥 [YOUTUBE] Config check - Key:', supabaseKey ? `Present (${supabaseKey.length} chars)` : 'MISSING');
-            console.log('🎥 [YOUTUBE] Key starts with:', supabaseKey ? supabaseKey.substring(0, 20) + '...' : 'N/A');
-            
-            // Check if key looks valid (JWT tokens are typically long)
-            if (supabaseKey && supabaseKey.length < 50) {
-                console.warn('🎥 [YOUTUBE] Warning: API key seems too short, might be invalid');
-            }
-            
-            // Verify it's a JWT token (should start with eyJ)
-            if (supabaseKey && !supabaseKey.startsWith('eyJ')) {
-                console.warn('🎥 [YOUTUBE] Warning: API key does not appear to be a valid JWT token (should start with "eyJ")');
-            }
-            
+            if (supabaseKey && supabaseKey.length < 50) console.warn('🎥 [YOUTUBE] Warning: API key seems too short, might be invalid');
+            if (supabaseKey && !supabaseKey.startsWith('eyJ')) console.warn('🎥 [YOUTUBE] Warning: API key does not appear to be a valid JWT token (should start with "eyJ")');
             return { supabaseUrl, supabaseKey };
         }
         

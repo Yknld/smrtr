@@ -22,6 +22,18 @@ The interactive homework page is **solver.html** (not index.html). It’s loaded
 
 Both **solver.html** and **index.html** use `?v=1769600000` on the script and stylesheet. When you change the solver, bump the `?v=` value in **solver.html** (and optionally index.html) and re-upload / redeploy so browsers load the new JS and CSS.
 
+## Environment variables (Vercel / web app)
+
+The **main app** (Vite) needs these in Vercel (or your host). Names must stay as-is so the app can read them:
+
+| Variable | Used for |
+|----------|----------|
+| `VITE_SUPABASE_URL` | Supabase project URL (solver gets it via postMessage from the app). |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key for the app’s Supabase client. |
+| `VITE_GEMINI_API_KEY` | Optional; Live Tutor in the solver if you pass it via postMessage. |
+
+You do **not** need different variable names. The solver does not read Vite env directly: when the solver runs inside the web app, the app sends Supabase URL and the user’s token to the iframe via postMessage, and the solver uses those. No extra env vars are required for “Feeling stuck?” or the resources modal.
+
 ## Summary
 
 | Consumer   | Loads from                    | To update |

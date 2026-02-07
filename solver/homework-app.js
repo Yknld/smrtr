@@ -16,17 +16,18 @@
         // Question state tracking (stores progress for each question)
         let questionStates = {};
 
-        // Wait for MathJax to be ready (script loads async; on production it can load after content)
+        // Wait for MathJax to be ready (script loads async; on production it can load after content).
+        // Must wait for startup.promise before typesetPromise() so inline $...$ math renders.
         function waitForMathJax(maxMs) {
             maxMs = maxMs || 8000;
             const start = Date.now();
             return new Promise(function (resolve) {
                 function check() {
-                    if (window.MathJax && window.MathJax.typesetPromise) {
-                        return resolve();
-                    }
                     if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
                         return window.MathJax.startup.promise.then(resolve).catch(resolve);
+                    }
+                    if (window.MathJax && window.MathJax.typesetPromise) {
+                        return resolve();
                     }
                     if (Date.now() - start >= maxMs) return resolve();
                     setTimeout(check, 150);

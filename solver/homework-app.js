@@ -897,8 +897,8 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                         run();
                     }
                 }
-                waitForMathJax(8000).then(typesetProblemMath);
-                setTimeout(typesetProblemMath, 1500);
+                waitForMathJax(15000).then(typesetProblemMath);
+                [500, 2000, 5000].forEach(ms => setTimeout(typesetProblemMath, ms));
                 
                 // Handle problem image
                 const problemImage = document.getElementById('problem-image');

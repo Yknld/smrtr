@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
 
-/** Copy solver/ to dist/solver/ so production can serve it same-origin. */
+/** Copy solver/ to dist/solver/ so production can serve it same-origin. Build-time cache bust for solver assets. */
 function copySolverToDist() {
   return {
     name: 'copy-solver',
@@ -13,10 +13,18 @@ function copySolverToDist() {
       const destDir = path.join(outDir, 'solver')
       if (!fs.existsSync(solverDir)) return
       fs.mkdirSync(destDir, { recursive: true })
+      const cacheBust = String(Date.now())
       for (const name of ['solver.html', 'homework-app.js', 'homework-styles.css']) {
         const src = path.join(solverDir, name)
         const dest = path.join(destDir, name)
-        if (fs.existsSync(src)) fs.copyFileSync(src, dest)
+        if (!fs.existsSync(src)) continue
+        if (name === 'solver.html') {
+          let html = fs.readFileSync(src, 'utf-8')
+          html = html.replace(/\?v=\d+/g, '?v=' + cacheBust)
+          fs.writeFileSync(dest, html)
+        } else {
+          fs.copyFileSync(src, dest)
+        }
       }
     },
   }

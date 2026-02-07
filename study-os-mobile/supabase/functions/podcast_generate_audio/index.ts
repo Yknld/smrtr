@@ -107,27 +107,152 @@ async function checkRunPodJobOnce(
   return null;
 }
 
-// RunPod Chatterbox Multilingual TTS Configuration
+// RunPod Chatterbox Multilingual TTS Configuration (used when GEMINI_API_KEY not set)
 const RUNPOD_ENDPOINT_ID = "f1hyps48e61yf7"; // Multilingual model (23 languages)
 const RUNPOD_BASE_URL = `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}`;
 
-/** Submit up to this many queued segments to RunPod per invocation (no wait). Workers process in parallel. */
-const SUBMIT_BATCH = 10;
+/** Submit all queued segments to RunPod in one invocation so the queue fills and all workers can run in parallel. Cap to avoid timeout. */
+const SUBMIT_BATCH = 500;
 /** Check up to this many in-flight jobs per invocation (one status request each; no blocking). Keeps invocation under ~60s. */
-const CHECK_BATCH = 10;
+const CHECK_BATCH = 50;
+
+/** Gemini 2.5 Flash TTS model (single-speaker per request). */
+const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
+/** Max segments to process per invocation (client can poll again for more). */
+const GEMINI_TTS_BATCH = 15;
+/** Max concurrent Gemini TTS requests to avoid 429 quota. */
+const GEMINI_TTS_CONCURRENCY = 2;
+/** Retry 429/503 up to this many times with exponential backoff. */
+const GEMINI_TTS_MAX_RETRIES = 3;
+
+/** Run async tasks with a concurrency limit to avoid rate limits. Results match input order. */
+async function runWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<PromiseSettledResult<R>[]> {
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let index = 0;
+  async function worker(): Promise<void> {
+    while (index < items.length) {
+      const i = index++;
+      const item = items[i];
+      try {
+        results[i] = { status: "fulfilled", value: await fn(item, i) };
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
+}
+
+/** Build a 44-byte WAV header for PCM 16-bit mono at 24kHz. */
+function wavHeader(dataLength: number, sampleRate = 24000, channels = 1, bitsPerSample = 16): Uint8Array {
+  const byteRate = sampleRate * channels * (bitsPerSample / 8);
+  const blockAlign = channels * (bitsPerSample / 8);
+  const header = new Uint8Array(44);
+  const view = new DataView(header.buffer);
+  header.set([0x52, 0x49, 0x46, 0x46], 0); // "RIFF"
+  view.setUint32(4, 36 + dataLength, true); // file size - 8
+  header.set([0x57, 0x41, 0x56, 0x45], 8); // "WAVE"
+  header.set([0x66, 0x6d, 0x74, 0x20], 12); // "fmt "
+  view.setUint32(16, 16, true); // fmt chunk size
+  view.setUint16(20, 1, true); // PCM = 1
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  header.set([0x64, 0x61, 0x74, 0x61], 36); // "data"
+  view.setUint32(40, dataLength, true);
+  return header;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Generate speech for one segment using Gemini 2.5 Flash TTS. Returns WAV bytes (24kHz 16-bit mono).
+ * Retries on 429 (quota) or 503 with exponential backoff.
+ */
+async function generateGeminiTTS(
+  apiKey: string,
+  text: string,
+  voiceName: string,
+  requestId: string
+): Promise<Uint8Array> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const transcript = (text.trim() || " ").replace(/\n+/g, " ");
+  const prompt = `Read the following transcript aloud. Generate audio only; do not generate or modify any text.\n\n${transcript}`;
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName },
+        },
+      },
+    },
+  };
+
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= GEMINI_TTS_MAX_RETRIES; attempt++) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const errText = await res.text();
+
+    if (res.ok) {
+      type GeminiTTSResponse = {
+        candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;
+      };
+      let json: GeminiTTSResponse;
+      try {
+        json = JSON.parse(errText) as GeminiTTSResponse;
+      } catch {
+        throw new Error(`Gemini TTS invalid JSON: ${errText.slice(0, 200)}`);
+      }
+      const b64 = json?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!b64) throw new Error("Gemini TTS response missing audio data");
+      const pcm = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const header = wavHeader(pcm.length);
+      const wav = new Uint8Array(header.length + pcm.length);
+      wav.set(header, 0);
+      wav.set(pcm, header.length);
+      return wav;
+    }
+
+    lastError = new Error(`Gemini TTS failed ${res.status}: ${errText.slice(0, 300)}`);
+    const isRetryable = res.status === 429 || res.status === 503;
+    if (!isRetryable || attempt === GEMINI_TTS_MAX_RETRIES) throw lastError;
+
+    const backoffMs = Math.min(2000 * Math.pow(2, attempt), 15000);
+    console.warn(`[${requestId}] Gemini TTS ${res.status}, retry in ${backoffMs}ms (attempt ${attempt + 1}/${GEMINI_TTS_MAX_RETRIES})`);
+    await sleep(backoffMs);
+  }
+  throw lastError ?? new Error("Gemini TTS failed");
+}
 
 // Voice configurations for speakers
-// Using natural human voices (8s samples)
+// RunPod: path to voice file. Gemini: prebuilt voice name (e.g. Kore, Puck, Zephyr, Fenrir, Leda).
 const VOICE_CONFIG = {
   a: {
-    speed: 1.0,                      // Normal speed for host
-    voice: "/app/runpod/male_en.flac",  // Male voice (8.9s)
-    description: "Host (Speaker A - Male Voice)"
+    speed: 1.0,
+    voice: "/app/runpod/male_en.flac", // RunPod host
+    geminiVoice: "Kore" as const, // Gemini 2.5 TTS: Firm, clear (Speaker A / host)
+    description: "Host (Speaker A)",
   },
   b: {
-    speed: 1.0,                      // Normal speed for co-host
-    voice: "/app/runpod/female_en.flac",  // Female voice (8.0s)
-    description: "Co-host (Speaker B - Female Voice)"
+    speed: 1.0,
+    voice: "/app/runpod/female_en.flac", // RunPod co-host
+    geminiVoice: "Puck" as const, // Gemini 2.5 TTS: Upbeat (Speaker B / co-host)
+    description: "Co-host (Speaker B)",
   },
 };
 
@@ -154,16 +279,23 @@ serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const runpodApiKey = Deno.env.get("RUNPOD_API_KEY") ?? "";
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
+    // Prefer RunPod Chatterbox when configured (avoids Gemini TTS quota limits)
+    const useGeminiTTS = !!geminiApiKey && !runpodApiKey;
 
-    if (!runpodApiKey) {
-      console.error(`[${requestId}] Missing RUNPOD_API_KEY`);
+    if (!useGeminiTTS && !runpodApiKey) {
+      console.error(`[${requestId}] Missing GEMINI_API_KEY and RUNPOD_API_KEY`);
       return new Response(
-        JSON.stringify({ error: "RunPod TTS service not configured" }),
+        JSON.stringify({ error: "TTS not configured. Set GEMINI_API_KEY (Gemini 2.5 TTS) or RUNPOD_API_KEY (RunPod)." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[${requestId}] Using RunPod Chatterbox Multilingual TTS (Endpoint: ${RUNPOD_ENDPOINT_ID})`);
+    if (useGeminiTTS) {
+      console.log(`[${requestId}] Using Gemini 2.5 Flash TTS (voices: ${VOICE_CONFIG.a.geminiVoice} / ${VOICE_CONFIG.b.geminiVoice})`);
+    } else {
+      console.log(`[${requestId}] Using RunPod Chatterbox Multilingual TTS (Endpoint: ${RUNPOD_ENDPOINT_ID})`);
+    }
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -310,7 +442,7 @@ serve(async (req: Request) => {
       console.log(`[${requestId}] Check phase: ${processedCount} ready, ${failedCount} failed, ${checkResults.filter((r) => r.status === "pending").length} still in progress`);
     }
 
-    // ----- PHASE 2: Submit queued segments to RunPod (no wait; workers process in parallel) -----
+    // ----- PHASE 2: Process queued segments (Gemini 2.5 TTS or RunPod) -----
     const { data: queuedSegments, error: segmentsError } = await supabaseAdmin
       .from("podcast_segments")
       .select("id, seq, speaker, text, tts_status")
@@ -318,7 +450,7 @@ serve(async (req: Request) => {
       .eq("user_id", episode.user_id)
       .eq("tts_status", "queued")
       .order("seq", { ascending: true })
-      .limit(SUBMIT_BATCH);
+      .limit(useGeminiTTS ? GEMINI_TTS_BATCH : SUBMIT_BATCH);
 
     if (segmentsError) {
       console.error(`[${requestId}] Failed to fetch segments:`, segmentsError);
@@ -329,37 +461,90 @@ serve(async (req: Request) => {
     }
 
     if (queuedSegments && queuedSegments.length > 0) {
-      console.log(`[${requestId}] ===== PHASE 2: Submitting ${queuedSegments.length} segments to RunPod (parallel workers) =====`);
-      const submitResults = await Promise.allSettled(
-        queuedSegments.map(async (segment: { id: string; seq: number; speaker: string; text: string }) => {
-          const voiceConfig = VOICE_CONFIG[segment.speaker as "a" | "b"];
-          const jobId = await submitRunPodJob(
-            segment.text,
-            voiceConfig.speed,
-            voiceConfig.voice,
-            episode.language || "en",
-            runpodApiKey,
-            requestId
-          );
-          await supabaseAdmin
-            .from("podcast_segments")
-            .update({ tts_status: "generating", runpod_job_id: jobId })
-            .eq("id", segment.id);
-          return jobId;
-        })
-      );
-      submittedCount = submitResults.filter((r) => r.status === "fulfilled").length;
-      for (let i = 0; i < submitResults.length; i++) {
-        const seg = queuedSegments[i];
-        if (submitResults[i].status === "rejected" && seg) {
-          await supabaseAdmin
-            .from("podcast_segments")
-            .update({ tts_status: "failed", runpod_job_id: null })
-            .eq("id", seg.id);
-          failedCount += 1;
+      if (useGeminiTTS) {
+        // Gemini 2.5 TTS: generate with concurrency limit to avoid 429, then upload and update each
+        console.log(`[${requestId}] ===== PHASE 2: Gemini TTS – ${queuedSegments.length} segments (max ${GEMINI_TTS_CONCURRENCY} concurrent) =====`);
+        const ttsResults = await runWithConcurrency(
+          queuedSegments,
+          GEMINI_TTS_CONCURRENCY,
+          async (segment: { id: string; seq: number; speaker: string; text: string }) => {
+            const voiceConfig = VOICE_CONFIG[segment.speaker as "a" | "b"];
+            const wav = await generateGeminiTTS(geminiApiKey, segment.text, voiceConfig.geminiVoice, requestId);
+            return { segment, wav };
+          }
+        );
+        for (let i = 0; i < queuedSegments.length; i++) {
+          const segment = queuedSegments[i];
+          const result = ttsResults[i];
+          if (result?.status === "rejected") {
+            console.error(`[${requestId}] Gemini TTS failed seg ${segment.seq}:`, result.reason);
+            await supabaseAdmin.from("podcast_segments").update({ tts_status: "failed" }).eq("id", segment.id);
+            failedCount += 1;
+            continue;
+          }
+          if (result?.status !== "fulfilled" || !result.value.wav) {
+            await supabaseAdmin.from("podcast_segments").update({ tts_status: "failed" }).eq("id", segment.id);
+            failedCount += 1;
+            continue;
+          }
+          const ext = "wav";
+          const audioPath = `podcasts/${episode.user_id}/${episode_id}/seg_${segment.seq}_${segment.speaker}.${ext}`;
+          const { error: uploadError } = await supabaseAdmin.storage
+            .from("tts_audio")
+            .upload(audioPath, result.value.wav, { contentType: "audio/wav", upsert: true });
+          if (uploadError) {
+            console.error(`[${requestId}] Gemini TTS upload failed seg ${segment.seq}:`, uploadError);
+            await supabaseAdmin.from("podcast_segments").update({ tts_status: "failed" }).eq("id", segment.id);
+            failedCount += 1;
+          } else {
+            await supabaseAdmin
+              .from("podcast_segments")
+              .update({
+                tts_status: "ready",
+                audio_bucket: "tts_audio",
+                audio_path: audioPath,
+                duration_ms: Math.floor(segment.text.length * 50),
+                runpod_job_id: null,
+              })
+              .eq("id", segment.id);
+            processedCount += 1;
+            console.log(`[${requestId}] ✓ Seg ${segment.seq} Gemini TTS ready: ${audioPath}`);
+          }
         }
+      } else {
+        // RunPod: submit all queued to RunPod at once
+        console.log(`[${requestId}] ===== PHASE 2: Submitting ALL ${queuedSegments.length} queued segments to RunPod at once (all workers can pick jobs) =====`);
+        const submitResults = await Promise.allSettled(
+          queuedSegments.map(async (segment: { id: string; seq: number; speaker: string; text: string }) => {
+            const voiceConfig = VOICE_CONFIG[segment.speaker as "a" | "b"];
+            const jobId = await submitRunPodJob(
+              segment.text,
+              voiceConfig.speed,
+              voiceConfig.voice,
+              episode.language || "en",
+              runpodApiKey,
+              requestId
+            );
+            await supabaseAdmin
+              .from("podcast_segments")
+              .update({ tts_status: "generating", runpod_job_id: jobId })
+              .eq("id", segment.id);
+            return jobId;
+          })
+        );
+        submittedCount = submitResults.filter((r) => r.status === "fulfilled").length;
+        for (let i = 0; i < submitResults.length; i++) {
+          const seg = queuedSegments[i];
+          if (submitResults[i].status === "rejected" && seg) {
+            await supabaseAdmin
+              .from("podcast_segments")
+              .update({ tts_status: "failed", runpod_job_id: null })
+              .eq("id", seg.id);
+            failedCount += 1;
+          }
+        }
+        console.log(`[${requestId}] Submit phase: ${submittedCount} sent to RunPod`);
       }
-      console.log(`[${requestId}] Submit phase: ${submittedCount} sent to RunPod`);
     }
 
     if (processedCount === 0 && submittedCount === 0 && (!queuedSegments || queuedSegments.length === 0)) {
@@ -394,14 +579,29 @@ serve(async (req: Request) => {
         .update({ status: "ready" })
         .eq("id", episode_id);
       console.log(`[${requestId}] ✓ Episode marked as ready`);
-    } else if (queuedCount === 0 && generatingCount === 0 && readyCount < totalCount) {
-      // Only mark failed when nothing is in progress (no queued, no generating) and some segments failed
-      const failedCountTotal = totalCount - readyCount;
-      console.error(`[${requestId}] No queued or generating segments but not all ready - marking episode as failed`);
-      await supabaseAdmin
-        .from("podcast_episodes")
-        .update({ status: "failed", error: `${failedCountTotal} segments failed to generate` })
-        .eq("id", episode_id);
+    }
+    let moreWork = queuedCount > 0 || generatingCount > 0;
+    if (queuedCount === 0 && generatingCount === 0 && readyCount < totalCount) {
+      // Some segments not ready (likely failed e.g. 429). Reset failed → queued so next poll retries.
+      const { data: resetResult, error: resetErr } = await supabaseAdmin
+        .from("podcast_segments")
+        .update({ tts_status: "queued" })
+        .eq("episode_id", episode_id)
+        .eq("user_id", episode.user_id)
+        .eq("tts_status", "failed")
+        .select("id");
+      if (!resetErr && resetResult?.length) {
+        console.log(`[${requestId}] Reset ${resetResult.length} failed segments to queued for retry`);
+        moreWork = true; // so client keeps polling and we retry
+      } else {
+        // No failed segments to retry; truly stuck. Mark episode failed.
+        const failedCountTotal = totalCount - readyCount;
+        console.error(`[${requestId}] No queued or generating segments, none reset – marking episode as failed`);
+        await supabaseAdmin
+          .from("podcast_episodes")
+          .update({ status: "failed", error: `${failedCountTotal} segments failed to generate` })
+          .eq("id", episode_id);
+      }
     }
 
     return new Response(
@@ -411,7 +611,7 @@ serve(async (req: Request) => {
         submitted: submittedCount,
         failed: failedCount,
         status: allReady ? "ready" : "voicing",
-        more_work: queuedCount > 0 || generatingCount > 0,
+        more_work: moreWork,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

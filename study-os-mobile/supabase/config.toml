@@ -50,6 +50,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.interactive_module_get]
 verify_jwt = false
+[functions.interactive_extract_questions_from_image]
+verify_jwt = false
 [functions.lesson_create_from_youtube]
 verify_jwt = false
 [functions.lesson_generate_flashcards]

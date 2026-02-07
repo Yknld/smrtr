@@ -119,16 +119,17 @@ true;
     ? `(function(){ window.__SUPABASE_TOKEN__ = ${JSON.stringify(token)}; window.__SUPABASE_URL__ = ${JSON.stringify(SUPABASE_URL)}; window.__LESSON_ID__ = ${JSON.stringify(lessonId)}; })(); true;`
     : '';
 
-  // Fetch HTML and CSS, inline CSS so WebView always gets styled content (avoids baseUrl/CORS issues)
+  // Fetch HTML, CSS, and homework-app.js; inline CSS and JS so WebView doesn't rely on baseUrl for relative resources (fixes "Failed to load viewer" on mobile)
   useEffect(() => {
     if (!uri || !token || htmlContent !== null || htmlError !== null) return;
     const baseUrl = solverBaseUrl || '';
     let cancelled = false;
     (async () => {
       try {
-        const [htmlRes, cssRes] = await Promise.all([
+        const [htmlRes, cssRes, appJsRes] = await Promise.all([
           fetch(uri),
           baseUrl ? fetch(baseUrl + 'homework-styles.css') : Promise.resolve(null),
+          baseUrl ? fetch(baseUrl + 'homework-app.js') : Promise.resolve(null),
         ]);
         if (cancelled) return;
         if (!htmlRes.ok) {
@@ -147,6 +148,19 @@ true;
           /<link\s+rel="stylesheet"\s+href="homework-styles\.css"\s*\/?>/i,
           `<style>${cssText.replace(/<\/style>/gi, '')}</style>`,
         );
+        // Inline homework-app.js so the WebView doesn't fail to load the relative script (iOS/Android baseUrl behavior)
+        const appJs =
+          appJsRes && appJsRes.ok
+            ? await appJsRes.text()
+            : null;
+        if (cancelled) return;
+        if (appJs) {
+          const escapedAppJs = appJs.replace(/<\/script>/gi, '<\\/script>');
+          inlined = inlined.replace(
+            /<script\s+src="homework-app\.js[^"]*"\s*><\/script>/i,
+            `<script>${escapedAppJs}</script>`,
+          );
+        }
         const injectScript = `<script>(function(){window.__SUPABASE_TOKEN__=${JSON.stringify(token)};window.__SUPABASE_URL__=${JSON.stringify(SUPABASE_URL)};window.__LESSON_ID__=${JSON.stringify(lessonId)};})();<\/script>`;
         inlined = inlined.replace(/<head\s*>/i, '<head>' + injectScript);
         setHtmlContent(inlined);

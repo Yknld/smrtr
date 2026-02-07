@@ -1,12 +1,12 @@
 /**
- * Matches study-os-mobile ActionTile.tsx – icon, label, optional subtitle, optional badge (generate | generating | generated), optional onRegenerate (shown when badge is generated), optional onReset (shown when badge is generating), optional regenerating (loading state)
+ * Matches study-os-mobile ActionTile.tsx – icon, label, optional subtitle, optional badge (generate | generating | generated), optional onRegenerate (shown when badge is generated, or always if alwaysShowRegenerate), optional onReset (shown when badge is generating), optional regenerating (loading state)
  */
-export default function ActionTile({ icon, label, subtitle, badge, disabled, onPress, onRegenerate, onReset, regenerating }) {
+export default function ActionTile({ icon, label, subtitle, badge, disabled, onPress, onRegenerate, onReset, regenerating, alwaysShowRegenerate }) {
   const badgeMod = regenerating ? 'generating' : badge === 'generated' ? 'generated' : badge === 'generating' ? 'generating' : 'generate'
   const showBadge = badge || regenerating
   const badgeClass = showBadge ? `so-action-tile-badge so-action-tile-badge--${badgeMod}` : ''
   const badgeLabel = regenerating ? 'Regenerating' : badge === 'generated' ? 'Generated' : badge === 'generating' ? 'Generating' : 'Generate'
-  const showRegenerate = (badge === 'generated' || regenerating) && onRegenerate
+  const showRegenerate = (alwaysShowRegenerate || badge === 'generated' || regenerating) && onRegenerate
   const showReset = badge === 'generating' && onReset
   return (
     <div className="so-action-tile-wrap">

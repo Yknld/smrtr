@@ -340,13 +340,9 @@ export default function LessonHubScreen() {
                   label="Podcast"
                   badge={actionStatuses?.podcast ?? 'generate'}
                   onPress={() => navigate(`/app/podcasts/play/${lessonId}`, { state: { lessonTitle } })}
-                  onRegenerate={actionStatuses?.podcast === 'generated' ? async () => {
-                    try {
-                      await regeneratePodcast(lessonId)
-                      const next = await fetchActionStatuses(lessonId)
-                      setActionStatuses(next)
-                    } catch (_) {}
-                  } : undefined}
+                  onRegenerate={() => handleRegenerate('podcast', () => regeneratePodcast(lessonId))}
+                  regenerating={regeneratingKey === 'podcast'}
+                  alwaysShowRegenerate
                 />
               </div>
               <div className="so-lesson-hub-grid-item">

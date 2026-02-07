@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../ui/tokens';
@@ -16,12 +17,16 @@ import { ActionTile } from '../../components/ActionTile/ActionTile';
 import { NotesPreview } from '../../components/NotesPreview/NotesPreview';
 import { BottomSheet, BottomSheetAction } from '../../components/BottomSheet/BottomSheet';
 import { RenameLessonModal } from '../../components/RenameLessonModal/RenameLessonModal';
+import { InteractiveQuestionsModal } from '../../components/InteractiveQuestionsModal/InteractiveQuestionsModal';
 import { ScheduleBottomSheet } from '../../components/ScheduleBottomSheet/ScheduleBottomSheet';
 import { updateLessonTitle, deleteLesson } from '../../data/lessons.repository';
 import { supabase, SUPABASE_URL } from '../../config/supabase';
 import { generateYouTubeRecommendations, fetchYouTubeResources } from '../../data/youtube.repository';
 import { upsertStudyPlan, buildRRule } from '../../data/schedule.repository';
 import { preloadPodcast } from '../../data/podcasts.repository';
+
+const { width: WINDOW_WIDTH } = Dimensions.get('window');
+const ACTION_CARD_SIZE = (WINDOW_WIDTH - spacing.lg * 2 - spacing.md) / 2;
 
 interface LessonHubScreenProps {
   route: {
@@ -57,6 +62,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false);
   const [creatingSchedule, setCreatingSchedule] = useState(false);
   const [courseId, setCourseId] = useState<string | null>(null);
+  const [interactiveQuestionsModalVisible, setInteractiveQuestionsModalVisible] = useState(false);
 
   // Mock lesson data - replace with actual data fetching
   const [lessonData, setLessonData] = useState<LessonData>({
@@ -574,7 +580,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
     });
   };
 
-  const handleGenerateInteractivePages = async () => {
+  const handleGenerateInteractivePages = async (options?: { imageBase64?: string; imageMimeType?: string }) => {
     try {
       setLessonData(prev => ({
         ...prev,
@@ -586,20 +592,58 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
         throw new Error('Not authenticated. Please sign in again.');
       }
 
-      const response = await fetch(
-        `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/lesson_generate_interactive`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ lesson_id: lessonId }),
+      const baseUrl = SUPABASE_URL.replace(/\/$/, '');
+      const headers = {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      };
+
+      let problem_texts: string[] | undefined;
+      if (options?.imageBase64) {
+        const extractRes = await fetch(
+          `${baseUrl}/functions/v1/interactive_extract_questions_from_image`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              image_base64: options.imageBase64,
+              image_mime_type: options.imageMimeType || 'image/jpeg',
+            }),
+          }
+        );
+        if (!extractRes.ok) {
+          const errText = await extractRes.text();
+          let err: { message?: string; error?: string } = {};
+          try {
+            err = errText ? JSON.parse(errText) : {};
+          } catch {
+            err = { error: errText || 'Could not read questions from the image. Try a clearer photo.' };
+          }
+          throw new Error(err.message || err.error || 'Could not read questions from the image. Try a clearer photo.');
         }
+        const extractData = await extractRes.json();
+        problem_texts = extractData.problem_texts;
+        if (!Array.isArray(problem_texts) || problem_texts.length === 0) {
+          throw new Error('No questions found in the image. Try a clearer photo.');
+        }
+      }
+
+      const body: { lesson_id: string; problem_texts?: string[] } = { lesson_id: lessonId };
+      if (problem_texts?.length) body.problem_texts = problem_texts;
+
+      const response = await fetch(
+        `${baseUrl}/functions/v1/lesson_generate_interactive`,
+        { method: 'POST', headers, body: JSON.stringify(body) }
       );
 
       if (!response.ok) {
-        const err = await response.json();
+        const errText = await response.text();
+        let err: { message?: string; error?: string } = {};
+        try {
+          err = errText ? JSON.parse(errText) : {};
+        } catch {
+          err = { error: errText || 'Failed to start interactive generation' };
+        }
         throw new Error(err.message || err.error || 'Failed to start interactive generation');
       }
 
@@ -763,7 +807,7 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
                     if (lessonData.outputs.interactive_pages) {
                       handleInteractiveSolver();
                     } else {
-                      handleGenerateInteractivePages();
+                      setInteractiveQuestionsModalVisible(true);
                     }
                   }}
                   onReset={isInteractGenerating ? handleResetInteractiveGeneration : undefined}
@@ -778,6 +822,8 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
                   onPress={handlePodcast}
                 />
               </View>
+            </View>
+            <View style={styles.pyramidRow}>
               <View style={styles.pyramidItem}>
                 <ActionTile
                   icon="videocam-outline"
@@ -794,8 +840,6 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
                   }}
                 />
               </View>
-            </View>
-            <View style={styles.pyramidRow}>
               <View style={styles.pyramidItem}>
                 <ActionTile
                   icon="layers-outline"
@@ -805,6 +849,8 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
                   onPress={handleFlashcards}
                 />
               </View>
+            </View>
+            <View style={styles.pyramidRow}>
               <View style={styles.pyramidItem}>
                 <ActionTile
                   icon="help-circle-outline"
@@ -814,8 +860,6 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
                   onPress={handleQuiz}
                 />
               </View>
-            </View>
-            <View style={styles.pyramidRow}>
               <View style={styles.pyramidItem}>
                 <ActionTile
                   icon="folder-outline"
@@ -876,6 +920,14 @@ export const LessonHubScreen: React.FC<LessonHubScreenProps> = ({ route, navigat
           currentTitle={currentTitle}
           onClose={() => setRenameModalVisible(false)}
           onRename={handleRenameLesson}
+        />
+
+        {/* Interactive questions source modal */}
+        <InteractiveQuestionsModal
+          visible={interactiveQuestionsModalVisible}
+          onClose={() => setInteractiveQuestionsModalVisible(false)}
+          onUseAIGenerated={() => handleGenerateInteractivePages()}
+          onUsePhoto={(imageBase64, mimeType) => handleGenerateInteractivePages({ imageBase64, imageMimeType: mimeType })}
         />
 
         {/* Schedule Bottom Sheet */}
@@ -956,14 +1008,15 @@ const styles = StyleSheet.create({
   pyramid: {
     alignItems: 'flex-start',
     gap: spacing.md,
+    width: '100%',
   },
   pyramidRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    gap: spacing.sm,
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: spacing.sm,
   },
   pyramidItem: {
-    width: 100,
-    minWidth: 100,
+    width: ACTION_CARD_SIZE,
   },
 });

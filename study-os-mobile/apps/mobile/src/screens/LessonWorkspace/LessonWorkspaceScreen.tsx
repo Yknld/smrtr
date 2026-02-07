@@ -636,13 +636,18 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
           </View>
 
           <View style={styles.headerRight}>
-            {/* Waveform icon - tappable */}
+            {/* Mic icon - start/stop live notes (large hit area for reliability) */}
             <TouchableOpacity
               style={styles.iconButton}
               onPress={isRecording ? stopRecording : startRecording}
               activeOpacity={0.7}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <WaveformIcon isRecording={isRecording} />
+              {isRecording ? (
+                <WaveformIcon isRecording={true} />
+              ) : (
+                <Ionicons name="mic-outline" size={22} color={colors.textPrimary} />
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -949,6 +954,10 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: spacing.sm,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,

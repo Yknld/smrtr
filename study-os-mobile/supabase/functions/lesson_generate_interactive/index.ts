@@ -8,7 +8,9 @@
 // Request:
 //   POST /lesson_generate_interactive
 //   Headers: Authorization: Bearer <user_token>
-//   Body: { lesson_id: string }
+//   Body: { lesson_id: string, problem_texts?: string[] }
+//   If problem_texts is provided (e.g. from interactive_extract_questions_from_image), those are used.
+//   Otherwise problem_texts are generated from lesson context (summary → notes → title).
 //
 // Response:
 //   { lesson_id: string, status: "generating", job_id?: string }
@@ -89,7 +91,7 @@ serve(async (req: Request) => {
       );
     }
 
-    let body: { lesson_id?: string };
+    let body: { lesson_id?: string; problem_texts?: unknown };
     try {
       body = await req.json();
     } catch {
@@ -100,6 +102,9 @@ serve(async (req: Request) => {
     }
 
     const lessonId = body.lesson_id;
+    const clientProblemTexts = Array.isArray(body.problem_texts)
+      ? body.problem_texts.filter((x): x is string => typeof x === "string").map((s) => s.trim()).filter(Boolean)
+      : undefined;
     if (!lessonId || typeof lessonId !== "string") {
       return new Response(
         JSON.stringify({ error: "lesson_id is required" }),
@@ -125,9 +130,27 @@ serve(async (req: Request) => {
       );
     }
 
-    // Get lesson context: notes first (primary), then summary, then title
-    let contextText = "";
-    const inputs = await gatherSourceInputs(supabaseClient, lessonId);
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
+    if (!geminiApiKey) {
+      console.error(`[${requestId}] GEMINI_API_KEY not set; cannot generate practice questions`);
+      return new Response(
+        JSON.stringify({
+          error: "Interactive generation requires GEMINI_API_KEY. Add it in Supabase Dashboard → Edge Functions → Secrets.",
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    let problem_texts: string[] = clientProblemTexts?.length ? clientProblemTexts : [];
+
+    if (problem_texts.length > 0) {
+      console.log(`[${requestId}] Using ${problem_texts.length} problem_texts from request (e.g. from image extraction)`);
+    }
+
+    if (problem_texts.length === 0) {
+      // Get lesson context: notes first (primary), then summary, then title
+      let contextText = "";
+      const inputs = await gatherSourceInputs(supabaseClient, lessonId);
     const hasNotes = !!(inputs.notes_final_text?.trim() || inputs.notes_raw_text?.trim());
     if (!hasNotes) {
       console.log(`[${requestId}] No notes in lesson_outputs (type=notes) for this lesson; will use summary or title`);
@@ -166,18 +189,6 @@ serve(async (req: Request) => {
     }
 
     // Generate practice questions from context via Gemini. Do not use raw summary chunks as questions.
-    let problem_texts: string[] = [];
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
-    if (!geminiApiKey) {
-      console.error(`[${requestId}] GEMINI_API_KEY not set; cannot generate practice questions`);
-      return new Response(
-        JSON.stringify({
-          error: "Interactive generation requires GEMINI_API_KEY. Add it in Supabase Dashboard → Edge Functions → Secrets.",
-        }),
-        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     if (contextText.trim()) {
       const prompt = `You are an expert educator. The CONTENT below is the lesson transcript/notes. Generate 1 to 3 specific practice QUESTIONS or problems that a student would answer using this content. Each question must be a concrete question (e.g. "Calculate...", "Explain why...", "What is...") based only on the concepts, formulas, or facts in the notes. Do NOT return meta-questions like "What are the main concepts?"—return actual practice questions.
 
@@ -257,6 +268,13 @@ ${contextText.trim()}`;
     } else {
       console.log(`[${requestId}] Generated ${problem_texts.length} practice questions from Gemini`);
     }
+    } // end if (problem_texts.length === 0) — AI-from-context path
+
+    if (problem_texts.length === 0) {
+      const topic = lesson.title || "this topic";
+      problem_texts = [`Explain the main ideas of "${topic}" and give one example.`];
+      console.log(`[${requestId}] Final fallback: using title-only question`);
+    }
 
     // Insert or update lesson_outputs (processing) so app shows "Generating"
     const { data: existing } = await supabaseAdmin
@@ -283,7 +301,12 @@ ${contextText.trim()}`;
       });
     }
 
-    // Enqueue RunPod job
+    // Enqueue RunPod job (problem_texts are either from user image or from lesson context)
+    console.log(`[${requestId}] Sending ${problem_texts.length} problem_texts to RunPod`);
+    if (problem_texts.length > 0) {
+      const preview = problem_texts[0].slice(0, 80).replace(/\n/g, " ");
+      console.log(`[${requestId}] First problem preview: ${preview}...`);
+    }
     const runUrl = `${RUNPOD_API_BASE}/${runpodEndpoint.trim()}/run`;
     const runBody = {
       input: {

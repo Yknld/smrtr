@@ -1,0 +1,4 @@
+{
+  "imports": { "supabase": "npm:@supabase/supabase-js@2" },
+  "verify_jwt": false
+}

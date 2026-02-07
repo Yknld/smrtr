@@ -3,8 +3,10 @@
  * Synced with app and Supabase; same data as study-os-mobile.
  * When a new asset is uploaded, the notes_append_from_asset edge function
  * is invoked so the lesson's single notes file is updated for all generations.
+ * PDFs: convert to PNGs in the browser (textify flow), then send images to the function.
  */
 import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/supabase'
+import { pdfToPngImages } from '../utils/pdfToPng'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 function isValidUuid(str) {
@@ -117,18 +119,37 @@ export async function uploadLessonAsset(lessonId, file) {
 
   if (insertError) throw new Error(insertError.message)
 
-  // Append this asset's content to the lesson notes (fire-and-forget)
   const { data: { session } } = await supabase.auth.getSession()
   const functionsUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/notes_append_from_asset`
-  fetch(functionsUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: SUPABASE_ANON_KEY,
-      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-    },
-    body: JSON.stringify({ lesson_id: lessonId, asset_id: row.id }),
-  }).catch((err) => console.warn('notes_append_from_asset:', err.message))
+  const headers = {
+    'Content-Type': 'application/json',
+    apikey: SUPABASE_ANON_KEY,
+    ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+  }
+
+  if (kind === 'pdf') {
+    // Textify flow: convert PDF to PNGs in browser, send images for extraction (avoids PDF/PPTX MIME issues)
+    pdfToPngImages(file)
+      .then((images) => {
+        if (images.length === 0) return
+        return fetch(functionsUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            lesson_id: lessonId,
+            images,
+            display_name: file.name || 'document.pdf',
+          }),
+        })
+      })
+      .catch((err) => console.warn('notes_append_from_asset (PDF as images):', err?.message))
+  } else {
+    fetch(functionsUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ lesson_id: lessonId, asset_id: row.id }),
+    }).catch((err) => console.warn('notes_append_from_asset:', err.message))
+  }
 
   return {
     id: row.id,

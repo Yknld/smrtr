@@ -500,15 +500,10 @@ export async function fetchPodcastEpisode(lessonId: string): Promise<PodcastEpis
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    if (error.code === 'PGRST116') {
-      // No rows returned
-      return null;
-    }
-    throw new Error(`Failed to fetch podcast episode: ${error.message}`);
-  }
+  if (error) throw new Error(`Failed to fetch podcast episode: ${error.message}`);
+  if (!data) return null;
 
   return {
     id: data.id,

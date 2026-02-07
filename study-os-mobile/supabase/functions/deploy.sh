@@ -12,6 +12,7 @@ FUNCTIONS=(
   gemini_translate
   generate_youtube_recommendations
   interactive_module_get
+  interactive_extract_questions_from_image
   lesson_create_from_youtube
   lesson_generate_flashcards
   lesson_generate_interactive

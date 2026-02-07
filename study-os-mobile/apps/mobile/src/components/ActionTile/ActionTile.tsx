@@ -60,7 +60,7 @@ export const ActionTile: React.FC<ActionTileProps> = ({
           <View style={styles.iconContainer}>
             <Ionicons
               name={icon}
-              size={24}
+              size={28}
               color={disabled ? colors.textTertiary : colors.textPrimary}
             />
           </View>
@@ -102,8 +102,9 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     borderWidth: 1,
     borderColor: colors.border,
+    width: '100%',
     aspectRatio: 1,
-    padding: spacing.md,
+    padding: spacing.lg,
     position: 'relative',
   },
   tileDisabled: {
@@ -153,22 +154,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   label: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.textPrimary,
     letterSpacing: -0.1,
-    lineHeight: 16,
+    lineHeight: 18,
     textAlign: 'center',
   },
   labelDisabled: {
     color: colors.textTertiary,
   },
   subtitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '400',
     color: colors.textTertiary,
     letterSpacing: 0,
-    lineHeight: 13,
+    lineHeight: 14,
     textAlign: 'center',
     marginTop: 2,
   },

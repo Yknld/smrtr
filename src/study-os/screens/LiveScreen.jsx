@@ -208,8 +208,13 @@ export default function LiveScreen() {
           )}
         </div>
         <div className="so-live-header-right">
-          <button type="button" className="so-live-icon-btn" aria-label="Audio">
-            <Icon name="waveform" size={22} />
+          <button
+            type="button"
+            className="so-live-icon-btn"
+            onClick={toggleRecording}
+            aria-label={recording ? 'Stop recording' : 'Start live notes'}
+          >
+            <Icon name={recording ? 'waveform' : 'mic'} size={22} />
           </button>
           <button type="button" className="so-live-icon-btn" aria-label="Headphones">
             <Icon name="headphones" size={22} />

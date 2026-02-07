@@ -14,7 +14,7 @@ Deploy with `--no-verify-jwt` (auth not yet integrated); the function still vali
 
 1. Loads the asset from `lesson_assets` and downloads the file from storage.
 2. **Text files** (plain, markdown, etc.): appends content (truncated if very long).
-3. **PDF / images / Office:** uses Gemini to summarize, then appends the summary.
+3. **PDF / images / Office:** uses Gemini to extract all text (OCR-style) and appends it to notes. **PPTX:** text is extracted from slide XML in-process (Gemini does not support PPTX MIME); large PPTX are chunked by slides and each chunk’s text is extracted the same way. DOCX and PDF chunking are stubbed. **Optional:** clients can send pre-rendered slide images via the `images` payload for vision-based extraction.
 4. Gets or creates the lesson's notes row (`lesson_outputs` type `notes`), appends a section `--- Content from <filename> ---` plus the text/summary, and clears `notes_final_text` so the user can re-finalize if desired.
 5. Returns `{ ok: true, appended_length, notes_preview }`.
 

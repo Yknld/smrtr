@@ -116,7 +116,7 @@ const SUBMIT_BATCH = 500;
 /** Check up to this many in-flight jobs per invocation (one status request each; no blocking). Keeps invocation under ~60s. */
 const CHECK_BATCH = 50;
 
-/** Gemini 2.5 Flash TTS model (single-speaker per request). */
+/** TTS: Gemini 3 has no TTS; use Gemini 2.5 TTS model. Other API calls in repo use only gemini-3-flash-preview / gemini-3-pro-preview. */
 const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 /** Max segments to process per invocation (client can poll again for more). */
 const GEMINI_TTS_BATCH = 15;

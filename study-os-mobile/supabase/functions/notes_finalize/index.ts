@@ -53,7 +53,6 @@ OUTPUT FORMAT (follow exactly):
 
 Topic: [Primary topic or subject area]
 Date: [Lecture date or "Not specified"]
-Duration: [Total length of lecture or "Not specified"]
 
 Key Takeaways
 
@@ -117,7 +116,7 @@ IMPORTANT RULES:
 6. Only include "Common Mistakes" section if errors/pitfalls were mentioned
 7. Include all technical terms in the Definitions section
 8. Omit any section that has no relevant content
-9. Date and Duration can be "Not specified" if not mentioned in the notes
+9. Date can be "Not specified" if not mentioned in the notes
 10. Write in the same language as the input notes`;
 
 serve(async (req: Request) => {
@@ -207,7 +206,7 @@ serve(async (req: Request) => {
     
     const { data: lesson, error: lessonError } = await supabaseClient
       .from("lessons")
-      .select("id, user_id")
+      .select("id, user_id, title, created_at")
       .eq("id", lesson_id)
       .single();
 
@@ -281,7 +280,7 @@ serve(async (req: Request) => {
 
     const genAI = new GoogleGenerativeAI(geminiKey);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       generationConfig: {
         temperature: 0.3, // More deterministic
         maxOutputTokens: 3072, // Increased for comprehensive format
@@ -307,11 +306,14 @@ serve(async (req: Request) => {
       
       // Fallback: return basic formatted version
       console.log(`[${requestId}] Using fallback: basic formatting`);
+      const lessonTitle = (lesson as { title?: string }).title?.trim() || "Not specified";
+      const createdDate = (lesson as { created_at?: string }).created_at
+        ? new Date((lesson as { created_at: string }).created_at).toISOString().slice(0, 10)
+        : "Not specified";
       finalNotesText = `Lecture Notes
 
-Topic: Not specified
-Date: Not specified
-Duration: Not specified
+Topic: ${lessonTitle}
+Date: ${createdDate}
 
 Key Takeaways
 
@@ -321,6 +323,17 @@ Raw Notes
 
 ${rawText}`;
     }
+
+    // Overwrite header with lesson name and created date (one source of truth per lesson)
+    const lessonTitle = (lesson as { title?: string }).title?.trim() || "Not specified";
+    const createdDate = (lesson as { created_at?: string }).created_at
+      ? new Date((lesson as { created_at: string }).created_at).toISOString().slice(0, 10)
+      : "Not specified";
+    const newHeader = `Topic: ${lessonTitle}\nDate: ${createdDate}`;
+    finalNotesText = finalNotesText.replace(
+      /^Topic:\s*[^\n]+\nDate:\s*[^\n]+(\nDuration:\s*[^\n]+)?(\n?)/m,
+      newHeader + "$2"
+    );
 
     // =========================================================================
     // 7. Save to notes_final_text

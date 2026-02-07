@@ -132,6 +132,24 @@ export async function fetchLessonById(lessonId) {
 }
 
 /**
+ * Update a lesson's title. Throws if not authenticated or not found.
+ */
+export async function updateLessonTitle(lessonId, title) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+
+  const { error } = await supabase
+    .from('lessons')
+    .update({ title: String(title).trim() || 'Lesson' })
+    .eq('id', lessonId)
+    .eq('user_id', user.id)
+
+  if (error) throw new Error(`Failed to update lesson: ${error.message}`)
+}
+
+/**
  * Delete a lesson. Throws if not authenticated or not found.
  */
 export async function deleteLesson(lessonId) {

@@ -11,17 +11,15 @@ interface CourseCardProps {
 export const CourseCard: React.FC<CourseCardProps> = ({ course, onPress }) => {
   const accentColor = course.color || colors.primary;
   
-  // Format last opened time
-  const formatLastOpened = (date: Date | null | undefined): string => {
-    if (!date) return 'Never opened';
-    
+  // Format created-at time (relative)
+  const formatCreatedAt = (date: Date | null | undefined): string => {
+    if (!date) return '';
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const seconds = Math.floor(diff / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-    
     if (days > 0) return `${days}d ago`;
     if (hours > 0) return `${hours}h ago`;
     if (minutes > 0) return `${minutes}m ago`;
@@ -46,7 +44,7 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, onPress }) => {
         <Text style={styles.subtitle}>
           {course.lessonCount} {course.lessonCount === 1 ? 'lesson' : 'lessons'}
           {' • '}
-          Last opened {formatLastOpened(course.lastOpenedAt)}
+          Created {formatCreatedAt(course.createdAt)}
         </Text>
         
         {course.term && (

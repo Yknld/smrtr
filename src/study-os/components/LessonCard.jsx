@@ -3,8 +3,8 @@
  */
 import { Icon } from './Icons'
 
-function formatLastOpened(date) {
-  if (!date) return 'Never opened'
+function formatCreatedAt(date) {
+  if (!date) return ''
   const d = new Date(date)
   const now = new Date()
   const diff = now.getTime() - d.getTime()
@@ -55,7 +55,7 @@ export default function LessonCard({ lesson, onPress, onLongPress, onDelete }) {
               {label}
             </span>
           </div>
-          <p className="so-lesson-subtitle">Last opened {formatLastOpened(lesson.lastOpenedAt)}</p>
+          <p className="so-lesson-subtitle">Created {formatCreatedAt(lesson.createdAt)}</p>
           {hasOutputs && (
             <div className="so-lesson-output-icons">
               {lesson.hasSummary && <span className="so-lesson-output-icon" aria-hidden><Icon name="fileText" size={18} /></span>}

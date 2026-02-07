@@ -8,6 +8,7 @@ import ActionTile from '../components/ActionTile'
 import { Icon } from '../components/Icons'
 import { notesGet, notesSetRaw, notesSyncFromAssets } from '../data/liveTranscription.repository'
 import { fetchLessonAssets } from '../data/lessonAssets.repository'
+import { fetchLessonById, updateLessonTitle, deleteLesson } from '../data/lessons.repository'
 import { fetchActionStatuses, generateFlashcards, generateQuiz, generateInteractive, resetInteractive } from '../data/lessonOutputs.repository'
 import { regeneratePodcast } from '../data/podcasts.repository'
 import { generateVideo } from '../data/video.repository'
@@ -39,7 +40,8 @@ export default function LessonHubScreen() {
   const { lessonId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const lessonTitle = location.state?.lessonTitle || 'Lesson'
+  const [displayTitle, setDisplayTitle] = useState(() => location.state?.lessonTitle || 'Lesson')
+  const lessonTitle = displayTitle
 
   const [noteBody, setNoteBody] = useState('')
   const [notesLoading, setNotesLoading] = useState(true)
@@ -49,7 +51,16 @@ export default function LessonHubScreen() {
   const [assetsLoading, setAssetsLoading] = useState(true)
   const [actionStatuses, setActionStatuses] = useState(null)
   const [regeneratingKey, setRegeneratingKey] = useState(null) // 'interactive' | 'flashcards' | 'quiz' | 'podcast' | 'video'
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [renameModalOpen, setRenameModalOpen] = useState(false)
+  const [renameInput, setRenameInput] = useState('')
+  const [savingRename, setSavingRename] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const saveTimeoutRef = useRef(null)
+
+  useEffect(() => {
+    setDisplayTitle(location.state?.lessonTitle || 'Lesson')
+  }, [location.state?.lessonTitle])
 
   const handleRegenerate = useCallback(async (key, fn) => {
     setRegeneratingKey(key)
@@ -205,6 +216,47 @@ export default function LessonHubScreen() {
     }
   }, [])
 
+  const openRenameModal = () => {
+    setRenameInput(displayTitle)
+    setRenameModalOpen(true)
+    setMenuOpen(false)
+  }
+
+  const handleRenameSubmit = async (e) => {
+    e?.preventDefault()
+    const title = (renameInput || '').trim() || displayTitle
+    if (!isValidUuid(lessonId)) return
+    setSavingRename(true)
+    try {
+      await updateLessonTitle(lessonId, title)
+      setDisplayTitle(title)
+      setRenameModalOpen(false)
+    } catch (err) {
+      console.error('Rename failed:', err?.message)
+      alert(err?.message || 'Failed to rename lesson')
+    } finally {
+      setSavingRename(false)
+    }
+  }
+
+  const handleDeleteLesson = async () => {
+    setMenuOpen(false)
+    if (!window.confirm(`Delete "${displayTitle}"? This cannot be undone.`)) return
+    if (!isValidUuid(lessonId)) return
+    setDeleting(true)
+    try {
+      const lesson = await fetchLessonById(lessonId)
+      if (!lesson) throw new Error('Lesson not found')
+      await deleteLesson(lessonId)
+      navigate(`/app/course/${lesson.courseId}`, { replace: true })
+    } catch (err) {
+      console.error('Delete failed:', err?.message)
+      alert(err?.message || 'Failed to delete lesson')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="so-screen">
       <header className="so-lesson-hub-header">
@@ -215,7 +267,34 @@ export default function LessonHubScreen() {
         <div className="so-lesson-hub-right">
           <button type="button" className="so-lesson-hub-icon-btn" aria-label="Play"><Icon name="play" size={24} /></button>
           <button type="button" className="so-lesson-hub-icon-btn" aria-label="Calendar"><Icon name="calendar" size={24} /></button>
-          <button type="button" className="so-lesson-hub-icon-btn" aria-label="Edit"><Icon name="pencil" size={24} /></button>
+          {isValidUuid(lessonId) && (
+            <div className="so-detail-menu-wrap">
+              <button
+                type="button"
+                className="so-lesson-hub-icon-btn"
+                aria-label="Edit lesson"
+                aria-expanded={menuOpen}
+                aria-haspopup="true"
+                onClick={() => setMenuOpen((v) => !v)}
+                disabled={deleting}
+              >
+                <Icon name="pencil" size={24} />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="so-detail-menu-backdrop" onClick={() => setMenuOpen(false)} aria-hidden />
+                  <div className="so-detail-menu-dropdown" role="menu">
+                    <button type="button" role="menuitem" className="so-detail-menu-item" onClick={openRenameModal}>
+                      Rename lesson
+                    </button>
+                    <button type="button" role="menuitem" className="so-detail-menu-item so-detail-menu-item--danger" onClick={handleDeleteLesson}>
+                      Delete lesson
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -306,7 +385,7 @@ export default function LessonHubScreen() {
             <div className="so-lesson-hub-pyramid-row">
               <div className="so-lesson-hub-grid-item">
                 <ActionTile
-                  icon={<Icon name="radio" size={28} />}
+                  icon={<Icon name="mic" size={28} />}
                   label="Live"
                   subtitle="Record + translate"
                   onPress={() => navigate(`/app/lesson/${lessonId}/live`, { state: { lessonTitle } })}
@@ -396,6 +475,37 @@ export default function LessonHubScreen() {
           </div>
         </div>
       </div>
+
+      {renameModalOpen && (
+        <div className="so-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="so-rename-lesson-title">
+          <div className="so-modal-backdrop" onClick={() => !savingRename && setRenameModalOpen(false)} />
+          <div className="so-modal so-modal-sm">
+            <h2 id="so-rename-lesson-title" className="so-modal-title">Rename lesson</h2>
+            <form onSubmit={handleRenameSubmit}>
+              <div className="so-modal-section">
+                <input
+                  type="text"
+                  className="so-modal-input"
+                  placeholder="Lesson name"
+                  value={renameInput}
+                  onChange={(e) => setRenameInput(e.target.value)}
+                  autoFocus
+                  disabled={savingRename}
+                  aria-label="Lesson name"
+                />
+              </div>
+              <div className="so-modal-actions">
+                <button type="button" className="so-modal-btn so-modal-btn--cancel" onClick={() => setRenameModalOpen(false)} disabled={savingRename}>
+                  Cancel
+                </button>
+                <button type="submit" className="so-modal-btn so-modal-btn--create" disabled={savingRename}>
+                  {savingRename ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

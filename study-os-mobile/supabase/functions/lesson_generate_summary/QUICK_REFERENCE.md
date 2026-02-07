@@ -109,7 +109,7 @@ USER_JWT="your_jwt" LESSON_ID="your_lesson_id" \
 
 ## Costs
 
-- **Model:** gemini-1.5-flash
+- **Model:** gemini-3-flash-preview
 - **Cost per summary:** ~$0.001-0.002
 - **Response time:** 3-12 seconds (depending on content length)
 - **Max input:** 50,000 characters

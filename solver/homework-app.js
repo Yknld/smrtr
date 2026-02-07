@@ -3191,7 +3191,7 @@ CRITICAL REQUIREMENTS:
             }
 
             try {
-                const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent';
+                const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
                 
                 // Create a prompt for generating a visualization of the overall question
                 const prompt = `You are creating ONLY a diagram illustration. Generate a detailed, accurate SVG diagram that visualizes this homework problem:
@@ -3606,7 +3606,7 @@ CRITERIA:
         // Generate image manually using Gemini (creates SVG)
         async function generateManualImage(stepIndex, imageDescription, visualizationEl, GEMINI_API_KEY, questionIndexOverride = null) {
             const questionIndex = questionIndexOverride !== null ? questionIndexOverride : currentQuestionIndex;
-            const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent';
+            const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
             
             // Clean the image description to remove any answer/solution text that might have been included
             let cleanedDescription = imageDescription;

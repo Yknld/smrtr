@@ -102,11 +102,10 @@ function formatHeaderDate(isoDate: string | null | undefined): string {
   }
 }
 
-/** Build the notes header from first-file (or fallback) values. */
-function buildNotesHeader(opts: { topic: string; date: string; duration: string }): string {
-  return `Topic: ${opts.topic}
-Date: ${opts.date}
-Duration: ${opts.duration}`;
+/** Build the notes header: lesson name and created date only (one call per lesson). */
+function buildNotesHeader(opts: { lessonTitle: string; date: string }): string {
+  return `Topic: ${opts.lessonTitle}
+Date: ${opts.date}`;
 }
 
 /** Shrink Gemini response: collapse newlines, strip code fences, trim. Keeps stored notes compact. */
@@ -476,12 +475,10 @@ async function chunkOfficeFile(
   }
 }
 
-/** Header shown once at the very top of the notes document (not repeated per asset). */
-/** Default header when no first-file info is available. */
+/** Default header when lesson fetch fails. */
 const NOTES_HEADER_FALLBACK = buildNotesHeader({
-  topic: "Not specified",
+  lessonTitle: "Not specified",
   date: "Not specified",
-  duration: "Not specified",
 });
 
 /** OCR-style extraction: get all text from the asset for use in notes, flashcards, quiz, etc. */
@@ -581,6 +578,9 @@ serve(async (req: Request) => {
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      const { data: lesson } = await supabaseAdmin.from("lessons").select("title, created_at").eq("id", lesson_id).single();
+      const lessonTitle = lesson?.title?.trim() || "Not specified";
+      const lessonCreatedDate = formatHeaderDate(lesson?.created_at);
       const geminiKey = Deno.env.get("GEMINI_API_KEY");
       if (!geminiKey) {
         return new Response(
@@ -632,11 +632,7 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: "Failed to load notes" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       if (!notes) {
-        const header = buildNotesHeader({
-          topic: topicFromDisplayName(displayName),
-          date: new Date().toISOString().slice(0, 10),
-          duration: "Not specified",
-        });
+        const header = buildNotesHeader({ lessonTitle, date: lessonCreatedDate });
         const initialContent = `${header}${assetSection}`;
         const { error: createError } = await supabaseAdmin.from("lesson_outputs").insert({
           user_id: user.id,
@@ -654,11 +650,7 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ ok: true, appended_length: initialContent.length, notes_preview: initialContent.slice(-800) }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       const currentText = notes.notes_raw_text || "";
-      const headerForEmpty = buildNotesHeader({
-        topic: topicFromDisplayName(displayName),
-        date: new Date().toISOString().slice(0, 10),
-        duration: "Not specified",
-      });
+      const headerForEmpty = buildNotesHeader({ lessonTitle, date: lessonCreatedDate });
       const newText = currentText.trim() === "" ? `${headerForEmpty}${assetSection}` : currentText + assetSection;
       const { error: updateError } = await supabaseAdmin.from("lesson_outputs").update({
         notes_raw_text: newText,
@@ -684,6 +676,10 @@ serve(async (req: Request) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const { data: lessonForAsset } = await supabaseAdmin.from("lessons").select("title, created_at").eq("id", lesson_id).single();
+    const lessonTitleAsset = lessonForAsset?.title?.trim() || "Not specified";
+    const lessonCreatedDateAsset = formatHeaderDate(lessonForAsset?.created_at);
 
     const { data: asset, error: assetError } = await supabaseAdmin
       .from("lesson_assets")
@@ -924,11 +920,7 @@ serve(async (req: Request) => {
     }
 
     if (!notes) {
-      const header = buildNotesHeader({
-        topic: topicFromDisplayName(displayName),
-        date: formatHeaderDate(asset.created_at),
-        duration: "Not specified",
-      });
+      const header = buildNotesHeader({ lessonTitle: lessonTitleAsset, date: lessonCreatedDateAsset });
       const initialContent = `${header}\n\n--- Content from ${displayName} ---\n\n${textToAppend.trim()}\n`;
       const { data: newNotes, error: createError } = await supabaseAdmin
         .from("lesson_outputs")
@@ -965,11 +957,7 @@ serve(async (req: Request) => {
     }
 
     const currentText = notes.notes_raw_text || "";
-    const headerForEmpty = buildNotesHeader({
-      topic: topicFromDisplayName(displayName),
-      date: formatHeaderDate(asset.created_at),
-      duration: "Not specified",
-    });
+    const headerForEmpty = buildNotesHeader({ lessonTitle: lessonTitleAsset, date: lessonCreatedDateAsset });
     const newText = currentText.trim() === ""
       ? `${headerForEmpty}\n\n--- Content from ${displayName} ---\n\n${textToAppend.trim()}\n`
       : currentText + assetSection;

@@ -128,7 +128,7 @@ serve(async (req: Request) => {
           expireTime: expireTime.toISOString(),
           newSessionExpireTime: newSessionExpireTime.toISOString(),
           liveConnectConstraints: {
-            model: "gemini-2.5-flash-native-audio-preview-12-2025",
+            model: "gemini-3-flash-preview",
             config: {
               sessionResumption: {},
               // For Live API: must use AUDIO response mode (Gemini speaks back)
@@ -148,7 +148,7 @@ serve(async (req: Request) => {
           token: token.name,
           expire_time: expireTime.toISOString(),
           new_session_expire_time: newSessionExpireTime.toISOString(),
-          model: "gemini-2.5-flash-native-audio-preview-12-2025",
+          model: "gemini-3-flash-preview",
           request_id: requestId,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

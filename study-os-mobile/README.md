@@ -32,10 +32,11 @@ See `apps/mobile/README.md` for setup instructions and development conventions.
 
 ## Documentation
 
-- `apps/mobile/docs/happy-path.md` - Navigation flow and screen responsibilities
-- `apps/mobile/docs/screen-states.md` - State management patterns per screen
-- `apps/mobile/docs/ui-style.md` - Design system and visual guidelines
-- `apps/mobile/PROJECT_STRUCTURE.md` - Detailed file/folder organization rules
+- [docs/OVERVIEW.md](docs/OVERVIEW.md) — How the app works and repository layout.
+- [docs/FEATURES.md](docs/FEATURES.md) — One flowchart per feature.
+- [docs/README.md](docs/README.md) — Documentation index.
+- `apps/mobile/docs/` — Screen-level and UI docs (happy-path, screen-states, ui-style).
+- `apps/mobile/PROJECT_STRUCTURE.md` — File and folder organization.
 
 ## Tech Stack
 

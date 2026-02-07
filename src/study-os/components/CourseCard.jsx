@@ -1,5 +1,5 @@
-function formatLastOpened(date) {
-  if (!date) return 'Never opened'
+function formatCreatedAt(date) {
+  if (!date) return ''
   const now = new Date()
   const diff = now.getTime() - new Date(date).getTime()
   const minutes = Math.floor(diff / 60000)
@@ -27,7 +27,7 @@ export default function CourseCard({ course, onPress }) {
         <p className="so-course-card-subtitle">
           {lessonCount} {lessonCount === 1 ? 'lesson' : 'lessons'}
           {' · '}
-          Last opened {formatLastOpened(course.lastOpenedAt)}
+          Created {formatCreatedAt(course.createdAt)}
         </p>
         {course.term && <p className="so-course-card-term">{course.term}</p>}
       </div>

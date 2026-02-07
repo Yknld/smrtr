@@ -54,8 +54,8 @@ async function transcribeWithGemini(
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  // Use gemini-1.5-flash for fast audio transcription
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  // Use gemini-3-flash-preview for fast audio transcription (repo standard: only gemini-3-flash-preview / gemini-3-pro-preview)
+  const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
   // Convert ArrayBuffer to base64
   const uint8Array = new Uint8Array(audioBuffer);

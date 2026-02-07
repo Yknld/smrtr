@@ -82,6 +82,7 @@ export const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer>
       <Tab.Navigator
+        initialRouteName="Home"
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: colors.textPrimary,

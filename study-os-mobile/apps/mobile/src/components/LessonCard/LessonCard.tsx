@@ -11,17 +11,15 @@ interface LessonCardProps {
 }
 
 export const LessonCard: React.FC<LessonCardProps> = ({ lesson, onPress, onLongPress }) => {
-  // Format last opened time
-  const formatLastOpened = (date: Date | null | undefined): string => {
-    if (!date) return 'Never opened';
-    
+  // Format created-at time (relative)
+  const formatCreatedAt = (date: Date | null | undefined): string => {
+    if (!date) return '';
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const seconds = Math.floor(diff / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-    
     if (days > 0) return `${days}d ago`;
     if (hours > 0) return `${hours}h ago`;
     if (minutes > 0) return `${minutes}m ago`;
@@ -51,7 +49,7 @@ export const LessonCard: React.FC<LessonCardProps> = ({ lesson, onPress, onLongP
         </View>
         
         <Text style={styles.subtitle}>
-          Last opened {formatLastOpened(lesson.lastOpenedAt)}
+          Created {formatCreatedAt(lesson.createdAt)}
         </Text>
         
         {hasOutputs && (

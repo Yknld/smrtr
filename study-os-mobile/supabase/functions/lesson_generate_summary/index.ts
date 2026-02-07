@@ -264,7 +264,7 @@ serve(async (req: Request) => {
 
     // Initialize Gemini
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     // Build prompt
     const toneInstruction = TONE_PROMPTS[tone];

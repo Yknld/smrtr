@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Record voice samples – Speaker A & B</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 24px 16px;
+      background: #0f0f0f;
+      color: #e5e5e5;
+      min-height: 100vh;
+    }
+    h1 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin: 0 0 8px;
+      letter-spacing: -0.02em;
+    }
+    .sub {
+      font-size: 0.8125rem;
+      color: #737373;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #a3a3a3;
+      margin: 0 0 12px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .row:first-of-type { margin-top: 0; }
+    button {
+      font-size: 0.875rem;
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid #404040;
+      background: #262626;
+      color: #e5e5e5;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #333;
+      border-color: #525252;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    button.record {
+      background: #991b1b;
+      border-color: #b91c1c;
+      color: #fff;
+    }
+    button.record:hover:not(:disabled) {
+      background: #b91c1c;
+    }
+    button.record.recording {
+      background: #dc2626;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse { 50% { opacity: 0.85; } }
+    .time {
+      font-variant-numeric: tabular-nums;
+      font-size: 0.875rem;
+      color: #737373;
+      min-width: 48px;
+    }
+    .hint {
+      font-size: 0.75rem;
+      color: #525252;
+      margin-top: 12px;
+    }
+    audio {
+      width: 100%;
+      margin-top: 10px;
+      height: 32px;
+    }
+    .download-name {
+      font-size: 0.75rem;
+      color: #525252;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Record voice samples</h1>
+  <p class="sub">Two clips for podcast TTS (Speaker A and Speaker B). Record at least 5 seconds each; 8–15 seconds is better.</p>
+
+  <div class="card" id="card-a">
+    <h2>Voice 1 – Speaker A (host)</h2>
+    <div class="row">
+      <button type="button" class="record" id="rec-a" data-which="a">Record</button>
+      <button type="button" id="stop-a" data-which="a" disabled>Stop</button>
+      <span class="time" id="time-a">0:00</span>
+    </div>
+    <audio id="play-a" controls style="display:none"></audio>
+    <div class="row">
+      <button type="button" id="dl-a" data-which="a" data-name="male_en" disabled>Download WAV</button>
+    </div>
+    <p class="download-name">Save as: <code>male_en.wav</code> → convert to <code>male_en.flac</code></p>
+  </div>
+
+  <div class="card" id="card-b">
+    <h2>Voice 2 – Speaker B (co-host)</h2>
+    <div class="row">
+      <button type="button" class="record" id="rec-b" data-which="b">Record</button>
+      <button type="button" id="stop-b" data-which="b" disabled>Stop</button>
+      <span class="time" id="time-b">0:00</span>
+    </div>
+    <audio id="play-b" controls style="display:none"></audio>
+    <div class="row">
+      <button type="button" id="dl-b" data-which="b" data-name="female_en" disabled>Download WAV</button>
+    </div>
+    <p class="download-name">Save as: <code>female_en.wav</code> → convert to <code>female_en.flac</code></p>
+  </div>
+
+  <p class="hint">Place the two WAV files in <code>services/chatterbox_tts_multilingual/runpod/</code>, then run:<br>
+  <code>ffmpeg -i male_en.wav -ar 24000 -ac 1 male_en.flac</code><br>
+  <code>ffmpeg -i female_en.wav -ar 24000 -ac 1 female_en.flac</code></p>
+
+  <script>
+(function () {
+  const TARGET_SR = 24000;
+  let stream = null;
+  let recorder = null;
+  let chunks = [];
+  const state = { a: { blob: null, start: 0, timer: null }, b: { blob: null, start: 0, timer: null } };
+
+  function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function tick(which) {
+    const s = state[which];
+    if (!s.start) return;
+    const el = document.getElementById('time-' + which);
+    if (el) el.textContent = formatTime((Date.now() - s.start) / 1000);
+  }
+
+  function startTimer(which) {
+    state[which].start = Date.now();
+    state[which].timer = setInterval(function () { tick(which); }, 200);
+  }
+
+  function stopTimer(which) {
+    if (state[which].timer) {
+      clearInterval(state[which].timer);
+      state[which].timer = null;
+    }
+    state[which].start = 0;
+    const el = document.getElementById('time-' + which);
+    if (el) el.textContent = '0:00';
+  }
+
+  function floatTo16BitPCM(float32Array) {
+    const buffer = new ArrayBuffer(float32Array.length * 2);
+    const view = new DataView(buffer);
+    let offset = 0;
+    for (let i = 0; i < float32Array.length; i++, offset += 2) {
+      let s = Math.max(-1, Math.min(1, float32Array[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return buffer;
+  }
+
+  function encodeWAV(samples, sampleRate, numChannels) {
+    const bytesPerSample = 2;
+    const blockAlign = numChannels * bytesPerSample;
+    const dataSize = samples.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+    function writeStr(offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    }
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true); // subchunk1size
+    view.setUint16(20, 1, true);  // PCM
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true); // bits per sample
+    writeStr(36, 'data');
+    view.setUint32(40, dataSize, true);
+    const pcm = floatTo16BitPCM(samples);
+    new Uint8Array(buffer).set(new Uint8Array(pcm), 44);
+    return buffer;
+  }
+
+  function resample(input, fromRate, toRate) {
+    if (fromRate === toRate) return input;
+    const ratio = fromRate / toRate;
+    const outLength = Math.round(input.length / ratio);
+    const output = new Float32Array(outLength);
+    for (let i = 0; i < outLength; i++) {
+      const srcIndex = i * ratio;
+      const j = Math.floor(srcIndex);
+      const f = srcIndex - j;
+      output[i] = (1 - f) * (input[j] || 0) + f * (input[j + 1] || 0);
+    }
+    return output;
+  }
+
+  function mixToMono(channels) {
+    const len = channels[0].length;
+    const out = new Float32Array(len);
+    for (let c = 0; c < channels.length; c++)
+      for (let i = 0; i < len; i++) out[i] += channels[c][i];
+    const scale = 1 / channels.length;
+    for (let i = 0; i < len; i++) out[i] *= scale;
+    return out;
+  }
+
+  function blobToWav(blob, done) {
+    const fr = new FileReader();
+    fr.onload = function () {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      ctx.decodeAudioData(fr.result).then(function (buf) {
+        const channels = [];
+        for (let i = 0; i < buf.numberOfChannels; i++) channels.push(buf.getChannelData(i));
+        const ch = buf.numberOfChannels === 1 ? buf.getChannelData(0) : mixToMono(channels);
+        let samples = ch;
+        if (buf.sampleRate !== TARGET_SR)
+          samples = resample(samples, buf.sampleRate, TARGET_SR);
+        const wav = encodeWAV(samples, TARGET_SR, 1);
+        done(new Blob([wav], { type: 'audio/wav' }));
+      }).catch(function () {
+        done(blob);
+      });
+    };
+    fr.readAsArrayBuffer(blob);
+  }
+
+  function updateUI(which, recording, hasBlob) {
+    const recBtn = document.getElementById('rec-' + which);
+    const stopBtn = document.getElementById('stop-' + which);
+    const dlBtn = document.getElementById('dl-' + which);
+    const playEl = document.getElementById('play-' + which);
+    if (recBtn) {
+      recBtn.disabled = recording;
+      recBtn.classList.toggle('recording', recording);
+      recBtn.textContent = recording ? 'Recording…' : 'Record';
+    }
+    if (stopBtn) stopBtn.disabled = !recording;
+    if (dlBtn) dlBtn.disabled = !hasBlob;
+    if (playEl) {
+      playEl.style.display = hasBlob ? 'block' : 'none';
+      if (hasBlob && state[which].blob) playEl.src = URL.createObjectURL(state[which].blob);
+    }
+  }
+
+  async function startRecording(which) {
+    try {
+      if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = [];
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+      recorder = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 128000 });
+      recorder.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
+      recorder.onstop = function () {
+        const blob = new Blob(chunks, { type: mime });
+        blobToWav(blob, function (wavBlob) {
+          state[which].blob = wavBlob;
+          stopTimer(which);
+          updateUI(which, false, true);
+        });
+      };
+      recorder.start(200);
+      startTimer(which);
+      updateUI(which, true, false);
+    } catch (e) {
+      alert('Microphone access needed: ' + (e.message || e));
+    }
+  }
+
+  function stopRecording(which) {
+    if (recorder && recorder.state === 'recording') recorder.stop();
+    recorder = null;
+  }
+
+  function download(which, name) {
+    const blob = state[which].blob;
+    if (!blob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (name || 'voice_' + which) + '.wav';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  document.getElementById('rec-a').addEventListener('click', function () { startRecording('a'); });
+  document.getElementById('rec-b').addEventListener('click', function () { startRecording('b'); });
+  document.getElementById('stop-a').addEventListener('click', function () { stopRecording('a'); });
+  document.getElementById('stop-b').addEventListener('click', function () { stopRecording('b'); });
+  document.getElementById('dl-a').addEventListener('click', function () { download('a', 'male_en'); });
+  document.getElementById('dl-b').addEventListener('click', function () { download('b', 'female_en'); });
+})();
+  </script>
+</body>
+</html>

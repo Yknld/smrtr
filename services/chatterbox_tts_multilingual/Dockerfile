@@ -66,8 +66,7 @@ COPY services/chatterbox_tts_multilingual/runpod /app/runpod
 # Create cache directories
 RUN mkdir -p /tmp/tts_cache /models/huggingface/hub /models/huggingface/transformers
 
-# Pre-download model weights at build time (with proper HF cache)
-RUN python3 -c "from chatterbox.mtl_tts import ChatterboxMultilingualTTS; model = ChatterboxMultilingualTTS.from_pretrained(device='cpu'); print('✅ Multilingual model cached')"
+# Model is downloaded on first run (rp_handler.py); set HF_TOKEN at runtime for gated models
 
 # Run serverless handler
 CMD ["python3", "-u", "/rp_handler.py"]

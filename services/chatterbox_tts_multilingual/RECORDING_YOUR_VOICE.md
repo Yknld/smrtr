@@ -66,7 +66,9 @@ Overwrite the existing files. No code changes are needed; the Edge Function alre
 
 ## Step 4: Rebuild and deploy RunPod
 
-The RunPod image must be rebuilt so the new FLACs are inside the container:
+The RunPod image must be rebuilt so the new FLACs are inside the container.
+
+**If your RunPod/Hugging Face template is connected to this repo:** set **Branch** to `main`, **Dockerfile path** to `services/chatterbox_tts_multilingual/Dockerfile`, and **Build context** to `.` (repo root). A root `Dockerfile` does not exist; the TTS image is built from the path above.
 
 ```bash
 # From repo root; build the image that RunPod uses (adjust image name if yours differs)

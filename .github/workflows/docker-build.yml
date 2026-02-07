@@ -1,3 +1,6 @@
+# Builds Chatterbox TTS images and pushes to ghcr.io (multilingual = podcast voices).
+# RunPod: use image ghcr.io/OWNER/chatterbox-tts-multilingual:latest
+# If using RunPod "Build from GitHub", set Dockerfile path: services/chatterbox_tts_multilingual/Dockerfile, Build context: .
 name: Build TTS Docker Images
 
 on:

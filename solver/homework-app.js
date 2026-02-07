@@ -883,14 +883,22 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 const problemText = data.problem.text || "Problem description will appear here.";
                 problemTextEl.innerHTML = ensureHtml(problemText);
                 
-                // Wait for MathJax (loads async from CDN; can be late on production) then render math
-                waitForMathJax(8000).then(() => {
-                    if (window.MathJax && window.MathJax.typesetPromise) {
-                        window.MathJax.typesetPromise([problemTextEl]).catch(err => {
-                            console.warn('MathJax typeset error:', err);
-                        });
+                // Wait for MathJax startup then typeset so inline $...$ renders (CDN loads async in production)
+                function typesetProblemMath() {
+                    if (!window.MathJax || !window.MathJax.typesetPromise) return;
+                    const M = window.MathJax;
+                    const run = () => {
+                        if (M.typesetClear) M.typesetClear([problemTextEl]);
+                        M.typesetPromise([problemTextEl]).catch(err => console.warn('MathJax typeset error:', err));
+                    };
+                    if (M.startup && M.startup.promise) {
+                        M.startup.promise.then(run).catch(run);
+                    } else {
+                        run();
                     }
-                });
+                }
+                waitForMathJax(8000).then(typesetProblemMath);
+                setTimeout(typesetProblemMath, 1500);
                 
                 // Handle problem image
                 const problemImage = document.getElementById('problem-image');

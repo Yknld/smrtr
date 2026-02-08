@@ -282,7 +282,7 @@ async function generateStoryPlan(
     },
   });
 
-  const prompt = `You are a video storyboard planner. Generate a detailed storyboard JSON for an educational explainer video between 1 and 3 minutes (60–180 seconds).
+  const prompt = `You are a video storyboard planner. Generate a detailed storyboard JSON for an educational explainer video of about 60 seconds total.
 
 LESSON TITLE: ${lessonTitle}
 
@@ -290,18 +290,18 @@ LESSON CONTENT:
 ${context}
 
 REQUIREMENTS:
-1. Create a storyboard with total duration between 60 and 180 seconds (1–3 minutes). Choose a natural length for the content; do not force exact timing.
-2. Break it into 5–12 scenes, each with clear visual and narrative content
-3. Each scene should have: type (e.g., "title", "explanation", "example", "recap"), seconds (duration), and content (text, bullets, equations, etc.)
-4. Make it visually engaging with mathematical/technical concepts if applicable
-5. Ensure smooth transitions between scenes
+1. Total duration must be about 60 seconds (55–65 seconds). Plan script and scene timings to hit ~60s.
+2. Break it into 4–8 scenes, each with clear visual and narrative content.
+3. Each scene should have: type (e.g., "title", "explanation", "example", "outro"), seconds (duration), and content (text, bullets, equations, etc.)
+4. You MUST include an OUTRO scene as the final scene: type "outro" or "recap", with a short recap, key takeaway, or sign-off (e.g. 5–10 seconds). Do not forget the outro.
+5. Make it visually engaging with mathematical/technical concepts if applicable.
 6. No subtitles or burn-in on-screen text for narration.
 
 OUTPUT FORMAT (valid JSON only):
 {
   "meta": {
     "title": "Short engaging title",
-    "durationSec": 120,
+    "durationSec": 60,
     "fps": 30
   },
   "scenes": [
@@ -314,7 +314,7 @@ OUTPUT FORMAT (valid JSON only):
     },
     {
       "type": "explanation",
-      "seconds": 25,
+      "seconds": 20,
       "content": {
         "text": "Main explanation",
         "bullets": ["Key point 1", "Key point 2"]
@@ -322,27 +322,25 @@ OUTPUT FORMAT (valid JSON only):
     },
     {
       "type": "example",
-      "seconds": 40,
+      "seconds": 20,
       "content": {
-        "text": "Example or visualization",
-        "equation": "Optional equation if math-related"
+        "text": "Example or visualization"
       }
     },
     {
-      "type": "recap",
-      "seconds": 10,
+      "type": "outro",
+      "seconds": 8,
       "content": {
-        "text": "Summary and key takeaway"
+        "text": "Summary and key takeaway. Do not forget this closing scene."
       }
     }
   ]
 }
 
 IMPORTANT:
-- Total duration between 60 and 180 seconds (1–3 minutes). Do not add subtitles.
-- Return ONLY valid JSON, no markdown code blocks
-- Make content educational and clear
-- Include visual descriptions in content fields`;
+- Total duration about 60 seconds. Include an OUTRO (final recap/sign-off) scene. Do not forget the outro.
+- Return ONLY valid JSON, no markdown code blocks.
+- Make content educational and clear. Include visual descriptions in content fields.`;
 
   const result = await model.generateContent(prompt);
   const response = await result.response;
@@ -358,12 +356,13 @@ IMPORTANT:
 
   const storyJSON: StoryJSON = JSON.parse(responseText);
 
-  // Normalize duration only if outside 1–3 min. Allow 60–180s as-is.
+  // Normalize duration to ~60s. Target 60; allow 55–65 as-is, otherwise scale.
   const totalSeconds = storyJSON.scenes.reduce((sum, scene) => sum + scene.seconds, 0);
-  const minSec = 60;
-  const maxSec = 180;
-  const targetSec = totalSeconds < minSec || totalSeconds > maxSec ? 120 : totalSeconds;
-  if (totalSeconds < minSec || totalSeconds > maxSec) {
+  const targetSec = 60;
+  const minSec = 55;
+  const maxSec = 65;
+  const needsScale = totalSeconds < minSec || totalSeconds > maxSec;
+  if (needsScale) {
     const scale = targetSec / totalSeconds;
     storyJSON.scenes.forEach((scene) => {
       scene.seconds = Math.max(1, Math.round(scene.seconds * scale));
@@ -424,7 +423,7 @@ You are OpenHands, a coding + execution agent. You have:
 
 PRIMARY GOAL
 Generate a COMPLETE Remotion project that:
-1) Produces a narrated explainer video (MP4) from a Story JSON plan — 1 to 3 minutes (60–180 seconds). No subtitles or burn-in text.
+1) Produces a narrated explainer video (MP4) from a Story JSON plan — about 60 seconds total. No subtitles or burn-in text.
 2) Uses Gemini for text (gemini-3 only) and Gemini 2.5 for TTS (Gemini 3 has no TTS):
    - Narration script only (no subtitles): use gemini-3-flash-preview or gemini-3-pro-preview
    - TTS (speech) audio: use Gemini 2.5 TTS model only (e.g. gemini-2.5-flash-preview-tts) — Gemini 3 does not support TTS
@@ -445,7 +444,7 @@ NON-NEGOTIABLE OUTPUTS (must exist)
 - README.md (exact commands to reproduce, including API key env var usage)
 
 VIDEO SPEC
-- Total duration: 1 to 3 minutes (60–180 seconds). Do not force exact length by whacking audio.
+- Total duration: about 60 seconds. Script and scenes are planned for ~60s; do not stretch or trim audio to hit exact length.
 - FPS: 30
 - Default resolution (16:9): 1280x720
 - If 9:16 enabled: 1080x1920
@@ -500,7 +499,7 @@ RENDERING METHOD
 Use Remotion CLI or @remotion/renderer. Headless only; no GUI.
 
 QUALITY CHECKS
-- MP4 has audio track; duration 60–180s (1–3 min); files non-empty; no subtitles.
+- MP4 has audio track; duration about 60s (~55–65s); files non-empty; no subtitles; final scene is an outro (recap/sign-off).
 
 EXECUTION REQUIREMENT
 Run: npm install, npm run all. If something fails, fix and rerun until success.
@@ -875,7 +874,7 @@ serve(async (req: Request) => {
     );
 
     // Step 5: Create video record with upload token (agent will POST to lesson_video_upload when done)
-    const durationMs = Math.round((storyJSON.meta.durationSec ?? 120) * 1000);
+    const durationMs = Math.round((storyJSON.meta.durationSec ?? 60) * 1000);
     const { error: insertError } = await supabaseAdmin
       .from("lesson_assets")
       .insert({

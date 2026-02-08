@@ -487,12 +487,13 @@ const EXTRACT_TEXT_PROMPT = `Extract all text from this document or image exactl
 /** Same instruction for a single full file (not a chunk). */
 const EXTRACT_TEXT_PROMPT_SINGLE = `Extract all text from this document or image exactly as it appears. Preserve structure, line breaks, and reading order. Include headings, bullet points, and body text. Output plain text only—no markdown, no commentary, no preamble.`;
 
-/** Turn raw slide transcript (e.g. from PPTX XML) into proper study notes. */
-const CONVERT_TO_STUDY_NOTES_PROMPT = `You are given raw text extracted from presentation slides (often with "=== Slide N ===" headers). Convert it into clear, structured study notes.
+/** Turn raw extracted text (from any document, image, or slides) into structured study notes. Used for all file types. */
+const CONVERT_TO_STUDY_NOTES_PROMPT = `You are given raw text extracted from a document, image, or presentation. Convert it into clear, structured study notes.
 
-- Remove slide numbers and "Slide N" headers.
+- Remove page/slide numbers and redundant headers (e.g. "=== Slide N ==="). Keep meaningful section headings.
 - Merge fragmented sentences and bullet points into coherent paragraphs or bullet lists where appropriate.
 - Keep key concepts, definitions, steps, and conclusions. Use headings or bold for main ideas if it helps clarity.
+- Summarize verbosity where useful; keep the content concise and suitable for studying.
 - Do not add filler or commentary. Output concise notes suitable for studying and for generating flashcards/quiz later.
 - Plain text only; no markdown code blocks or "Here are the notes:" preamble.`;
 
@@ -613,13 +614,14 @@ serve(async (req: Request) => {
           parts.push(`[Page ${i + 1}: extraction failed.]`);
         }
       }
-      const textToAppend = parts.join("\n\n");
+      let textToAppend = parts.join("\n\n");
       if (!textToAppend.trim()) {
         return new Response(
           JSON.stringify({ error: "No text could be extracted from the images" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      textToAppend = await convertTranscriptToStudyNotes(geminiKey, textToAppend.trim(), requestId);
       const displayName = displayNameFromBody || "document";
       const assetSection = `\n\n--- Content from ${displayName} ---\n\n${textToAppend.trim()}\n`;
       let { data: notes, error: notesError } = await supabaseAdmin
@@ -736,6 +738,12 @@ serve(async (req: Request) => {
         } else {
           textToAppend = trimmed;
         }
+        if (textToAppend.trim()) {
+          const geminiKeyText = Deno.env.get("GEMINI_API_KEY");
+          if (geminiKeyText) {
+            textToAppend = await convertTranscriptToStudyNotes(geminiKeyText, textToAppend, requestId);
+          }
+        }
       } catch (e) {
         console.error(`[${requestId}] Failed to read text asset:`, e);
         return new Response(
@@ -814,7 +822,8 @@ serve(async (req: Request) => {
                   parts.push(`[Part: ${partLabel} — summarization failed${hint}.]`);
                 }
               }
-              textToAppend = parts.join("\n\n");
+              const rawChunked = parts.join("\n\n");
+              textToAppend = await convertTranscriptToStudyNotes(geminiKey!, rawChunked, requestId);
             }
           }
         } catch (chunkErr) {
@@ -872,7 +881,7 @@ serve(async (req: Request) => {
               if (!summary) {
                 textToAppend = `[Content from ${displayName}: no text could be extracted.]`;
               } else {
-                textToAppend = summary;
+                textToAppend = await convertTranscriptToStudyNotes(geminiKeyForSingle, summary, requestId);
               }
             } catch (geminiErr: unknown) {
             const errMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);

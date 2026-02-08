@@ -91,6 +91,7 @@ export default function HomeScreen() {
   return (
     <div className="so-screen">
       <header className="so-home-header">
+        <img src="/smrtr-icon.png" alt="" className="so-home-logo" width={32} height={32} />
         <h1 className="so-home-title">Smartr</h1>
         <div className="so-home-header-actions">
           <button

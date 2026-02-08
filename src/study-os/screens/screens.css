@@ -30,6 +30,13 @@
   background-color: #1C1C1C;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
+.so-home-logo {
+  width: 32px;
+  height: 32px;
+  margin-right: 10px;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
 .so-home-title {
   font-size: 18px;
   font-weight: 600;

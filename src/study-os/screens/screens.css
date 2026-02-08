@@ -1841,6 +1841,29 @@
 }
 .so-live-ask-send:hover:not(:disabled) { color: #9CA8BD; }
 .so-live-ask-send:disabled { opacity: 0.4; cursor: not-allowed; }
+.so-live-qa-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #737373;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.so-live-qa-item { margin-bottom: 14px; }
+.so-live-qa-item:last-child { margin-bottom: 0; }
+.so-live-qa-question {
+  font-size: 14px;
+  color: #D4D4D4;
+  line-height: 1.45;
+  margin: 0 0 6px 0;
+}
+.so-live-qa-answer {
+  font-size: 14px;
+  color: #A3A3A3;
+  line-height: 1.55;
+  margin: 0;
+  white-space: pre-wrap;
+}
 
 /* ========== AITutorScreen ========== */
 .so-tutor-content {

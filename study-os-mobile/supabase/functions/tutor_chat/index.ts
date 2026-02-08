@@ -38,6 +38,8 @@ interface TutorChatRequest {
   lessonId?: string | null;
   courseId?: string | null;
   message: string;
+  /** Optional live transcript from current recording session (overrides or supplements DB transcript) */
+  liveTranscript?: string | null;
 }
 
 interface CourseMaterial {
@@ -103,7 +105,7 @@ serve(async (req: Request) => {
 
     // Parse request body
     const body: TutorChatRequest = await req.json();
-    const { conversationId, lessonId, courseId, message } = body;
+    const { conversationId, lessonId, courseId, message, liveTranscript } = body;
 
     // Validate required fields
     if (!message || message.trim().length === 0) {
@@ -400,6 +402,18 @@ serve(async (req: Request) => {
       }
 
       console.log(`[${requestId}] Total materials fetched: ${courseMaterials.length}`);
+    }
+
+    // When client sends live transcript (e.g. during live note-taking), use it so AI has latest content
+    if (liveTranscript && liveTranscript.trim().length > 0) {
+      const truncated = liveTranscript.trim().substring(0, 5000);
+      courseMaterials.push({
+        id: "live_transcript",
+        title: "Live transcript (current session)",
+        type: "transcript",
+        text_content: truncated,
+      });
+      console.log(`[${requestId}] Using live transcript (${truncated.length} chars)`);
     }
 
     // -------------------------------------------------------------------------

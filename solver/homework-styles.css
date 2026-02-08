@@ -257,6 +257,22 @@ body {
     width: auto;
 }
 
+.problem-visualizer-content .problem-viz-image-wrap {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.problem-visualizer-content .problem-viz-image {
+    max-width: 100%;
+    max-height: 400px;
+    height: auto;
+    width: auto;
+    display: block;
+    border-radius: 8px;
+}
+
 /* Responsive: stack on mobile */
 @media (max-width: 768px) {
     .problem-section {
@@ -303,7 +319,6 @@ body {
     opacity: 0.6;
     background: var(--bg-secondary);
     cursor: not-allowed;
-    pointer-events: none;
     position: relative;
 }
 
@@ -341,9 +356,9 @@ body {
 }
 
 /* Blur locked step content to hide answers */
-.step-card.locked .step-content {
+.step-card.locked .step-input-section,
+.step-card.locked .step-right {
     filter: blur(8px);
-    user-select: none;
 }
 
 /* Add overlay message on locked steps */
@@ -557,6 +572,21 @@ body {
     min-height: 300px;
     max-height: 600px;
     border: none;
+    border-radius: 8px;
+}
+
+.step-visualization .problem-viz-image-wrap {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.step-visualization .problem-viz-image {
+    max-width: 100%;
+    max-height: 500px;
+    height: auto;
+    display: block;
     border-radius: 8px;
 }
 
@@ -924,6 +954,7 @@ body {
     padding: 16px;
     border-top: 1px solid var(--border);
     display: flex;
+    align-items: flex-end;
     gap: 8px;
 }
 
@@ -943,6 +974,8 @@ body {
 }
 
 .chatbot-send {
+    flex-shrink: 0;
+    align-self: flex-end;
     padding: 10px 20px;
     background: var(--primary);
     color: white;
@@ -987,21 +1020,22 @@ body {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-lg);
 }
+
 .resources-modal-header {
-    padding: 20px 24px;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .resources-modal-header h3 {
-    font-size: 1rem;
+    font-size: 1.1rem;
     font-weight: 600;
     color: var(--text-primary);
-    letter-spacing: -0.01em;
 }
 
 .resources-modal-close {
@@ -1009,28 +1043,59 @@ body {
     border: none;
     font-size: 22px;
     line-height: 1;
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     cursor: pointer;
     padding: 4px;
     width: 32px;
     height: 32px;
     border-radius: 6px;
-    transition: color 0.15s, background 0.15s;
 }
+
 .resources-modal-close:hover {
-    color: var(--text-primary);
     background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 #resources-modal-body {
-    padding: 20px 24px 24px;
+    padding: 20px;
     overflow-y: auto;
+    min-height: 120px;
+}
+
+.resources-loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 24px 0;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.resources-loading::before {
+    content: '';
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.resources-empty,
+.resources-error {
+    padding: 24px 0;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.resources-error {
+    color: var(--danger);
 }
 
 .resources-videos-list {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
 }
 
 .resource-video-item {
@@ -1038,27 +1103,26 @@ body {
     grid-template-columns: 160px 1fr;
     gap: 16px;
     align-items: start;
-    padding: 14px 0;
+    padding: 12px 0;
     border-bottom: 1px solid var(--border-light);
 }
+
 .resource-video-item:last-child {
     border-bottom: none;
-    padding-bottom: 0;
-}
-.resource-video-item:first-child {
-    padding-top: 0;
 }
 
 .resource-video-thumbnail {
     border-radius: 8px;
     overflow: hidden;
     background: var(--bg-tertiary);
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 16/9;
 }
+
 .resource-video-thumbnail a {
     display: block;
     line-height: 0;
 }
+
 .resource-video-thumbnail img {
     width: 100%;
     height: 100%;
@@ -1066,49 +1130,47 @@ body {
 }
 
 .resource-video-title {
-    font-size: 0.9375rem;
     font-weight: 500;
-    line-height: 1.35;
+    font-size: 0.95rem;
 }
+
 .resource-video-title a {
     color: var(--primary);
     text-decoration: none;
 }
+
 .resource-video-title a:hover {
     text-decoration: underline;
 }
 
 .resource-video-meta {
-    font-size: 0.8125rem;
-    color: var(--text-secondary);
     margin-top: 4px;
-}
-.resource-video-meta strong {
-    font-weight: 500;
-    color: var(--text-primary);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
 }
 
 .resource-video-reason {
-    font-size: 0.8125rem;
-    color: var(--text-secondary);
-    line-height: 1.45;
-    margin-top: 8px;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    margin-top: 6px;
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
 }
 
-.resources-empty,
-.resources-loading,
-.resources-error {
-    font-size: 0.9375rem;
-    color: var(--text-secondary);
-    padding: 24px 0;
-    text-align: left;
+.step-resources-button.loading {
+    opacity: 0.7;
+    pointer-events: none;
 }
-.resources-error {
-    color: var(--danger);
+
+.step-resources-button.loading::after {
+    content: '';
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-left: 6px;
+    vertical-align: middle;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
 }
 
 /* ==================== MODULE MODAL ==================== */
@@ -1390,12 +1452,16 @@ body {
         align-items: flex-end;
     }
 
+    .resources-modal-content {
+        max-height: 90vh;
+    }
+
     .resource-video-item {
         grid-template-columns: 1fr;
-        gap: 12px;
     }
+
     .resource-video-thumbnail {
-        max-width: 240px;
+        max-width: 100%;
     }
 
     .module-modal-body iframe {

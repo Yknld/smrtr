@@ -1,6 +1,26 @@
 # Interactive Solver – where it’s served from
 
-The interactive homework page is **solver.html** (not index.html). It’s loaded from two places:
+The interactive homework page is **solver.html** (not index.html). It’s loaded from two places.
+
+## Keeping solver code up to date (source: GeminiLoop)
+
+The **canonical implementation** of the interactive solver is in **GeminiLoop** (same repo or sibling): `homework-app.js`, `homework-styles.css`, `solver.html`, and the logic that loads manifest + components. The **web and mobile app** use a **copy** in `smrtr/solver/`. To keep behavior in sync (e.g. image handling, manifest format, iframe loading):
+
+1. **Copy from GeminiLoop into smrtr/solver/**  
+   From the repo root (with both GeminiLoop and smrtr available):
+   ```bash
+   cp GeminiLoop/homework-app.js    smrtr/solver/
+   cp GeminiLoop/homework-styles.css smrtr/solver/
+   cp GeminiLoop/solver.html        smrtr/solver/
+   ```
+   Or run the sync script if present: `./scripts/sync-solver-from-gemini-loop.sh` (from smrtr).
+
+2. **Bump cache**  
+   In `solver/solver.html`, update the `?v=` query on the script and stylesheet (e.g. `?v=1769600000` → new timestamp).
+
+3. **Deploy**  
+   - **Web:** Rebuild and deploy the smrtr web app so `dist/solver/` gets the new files.  
+   - **Mobile / external viewer:** Upload `solver.html`, `homework-app.js`, `homework-styles.css` to Supabase Storage bucket **solver** so `SOLVER_VIEWER_URL` serves the new code.
 
 ## 1. Web app (Study OS web)
 

@@ -15,26 +15,6 @@
 
         // Question state tracking (stores progress for each question)
         let questionStates = {};
-
-        // Wait for MathJax to be ready (script loads async; on production it can load after content).
-        // Must wait for startup.promise before typesetPromise() so inline $...$ math renders.
-        function waitForMathJax(maxMs) {
-            maxMs = maxMs || 8000;
-            const start = Date.now();
-            return new Promise(function (resolve) {
-                function check() {
-                    if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
-                        return window.MathJax.startup.promise.then(resolve).catch(resolve);
-                    }
-                    if (window.MathJax && window.MathJax.typesetPromise) {
-                        return resolve();
-                    }
-                    if (Date.now() - start >= maxMs) return resolve();
-                    setTimeout(check, 150);
-                }
-                check();
-            });
-        }
         
         // Component export system for evaluation pipeline
         const exportedComponents = [];
@@ -299,16 +279,21 @@
             if (questionData.problem.visualization) {
                 try {
                     const vizUrl = resolveAssetUrl(moduleId, questionData.problem.visualization);
-                    console.log(`   🖼️  Loading visualization from: ${vizUrl}`);
-                    const cacheBuster = vizUrl.includes('?') ? '&_t=' + Date.now() : '?_t=' + Date.now();
-                    const vizResponse = await fetch(`${vizUrl}${cacheBuster}`);
-                    console.log(`   📡 Fetch response status: ${vizResponse.status} ${vizResponse.statusText}`);
-                    if (vizResponse.ok) {
-                        const svg = await vizResponse.text();
-                        problemVisualization = `<div class="svg-container">${svg}</div>`;
-                        console.log(`   ✅ Successfully loaded visualization (${svg.length} chars) for "${questionTitle}"`);
+                    const isImage = /\.(png|jpg|jpeg|webp)$/i.test(questionData.problem.visualization || '');
+                    console.log(`   🖼️  Loading visualization from: ${vizUrl} (${isImage ? 'image' : 'svg'})`);
+                    if (isImage) {
+                        problemVisualization = `<div class="problem-viz-image-wrap"><img src="${vizUrl}" alt="Problem diagram" class="problem-viz-image" loading="lazy" decoding="async" /></div>`;
+                        console.log(`   ✅ Using image visualization for "${questionTitle}"`);
                     } else {
-                        console.error(`   ❌ Failed to load visualization for "${questionTitle}": ${vizResponse.status} ${vizResponse.statusText}`);
+                        const cacheBuster = vizUrl.includes('?') ? '&_t=' + Date.now() : '?_t=' + Date.now();
+                        const vizResponse = await fetch(`${vizUrl}${cacheBuster}`);
+                        if (vizResponse.ok) {
+                            const svg = await vizResponse.text();
+                            problemVisualization = `<div class="svg-container">${svg}</div>`;
+                            console.log(`   ✅ Loaded SVG visualization (${svg.length} chars) for "${questionTitle}"`);
+                        } else {
+                            console.error(`   ❌ Failed to load visualization: ${vizResponse.status}`);
+                        }
                     }
                 } catch (e) {
                     console.error(`   ❌ Error loading visualization for "${questionTitle}":`, e);
@@ -351,19 +336,26 @@
                             }
                         }
                         
-                        // Load SVG visual
+                        // Load visual (image or SVG)
                         if (step.visual) {
-                            try {
+                            const isImage = /\.(png|jpg|jpeg|webp)$/i.test(step.visual || '');
+                            if (isImage) {
                                 const visualUrl = resolveAssetUrl(moduleId, step.visual);
-                                const cacheBuster = visualUrl.includes('?') ? '&_t=' + Date.now() : '?_t=' + Date.now();
-                                const visualResponse = await fetch(`${visualUrl}${cacheBuster}`);
-                                if (visualResponse.ok) {
-                                    const svg = await visualResponse.text();
-                                    stepData.visualization = `<div class="svg-container">${svg}</div>`;
-                                    console.log(`✅ Loaded SVG for step ${step.id}`);
+                                stepData.visualization = `<div class="problem-viz-image-wrap"><img src="${visualUrl}" alt="Diagram" class="problem-viz-image" loading="lazy" decoding="async" /></div>`;
+                                console.log(`✅ Using image for step ${step.id}`);
+                            } else {
+                                try {
+                                    const visualUrl = resolveAssetUrl(moduleId, step.visual);
+                                    const cacheBuster = visualUrl.includes('?') ? '&_t=' + Date.now() : '?_t=' + Date.now();
+                                    const visualResponse = await fetch(`${visualUrl}${cacheBuster}`);
+                                    if (visualResponse.ok) {
+                                        const svg = await visualResponse.text();
+                                        stepData.visualization = `<div class="svg-container">${svg}</div>`;
+                                        console.log(`✅ Loaded SVG for step ${step.id}`);
+                                    }
+                                } catch (e) {
+                                    console.error(`❌ Failed to load visual: ${step.visual}`, e);
                                 }
-                            } catch (e) {
-                                console.error(`❌ Failed to load visual: ${step.visual}`, e);
                             }
                         }
                         
@@ -883,22 +875,23 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 const problemText = data.problem.text || "Problem description will appear here.";
                 problemTextEl.innerHTML = ensureHtml(problemText);
                 
-                // Wait for MathJax startup then typeset so inline $...$ renders (CDN loads async in production)
-                function typesetProblemMath() {
-                    if (!window.MathJax || !window.MathJax.typesetPromise) return;
-                    const M = window.MathJax;
-                    const run = () => {
-                        if (M.typesetClear) M.typesetClear([problemTextEl]);
-                        M.typesetPromise([problemTextEl]).catch(err => console.warn('MathJax typeset error:', err));
-                    };
-                    if (M.startup && M.startup.promise) {
-                        M.startup.promise.then(run).catch(run);
-                    } else {
-                        run();
+                // Trigger MathJax to render the math (with small delay to ensure ready)
+                setTimeout(() => {
+                    if (window.MathJax && window.MathJax.typesetPromise) {
+                        window.MathJax.typesetPromise([problemTextEl]).catch(err => {
+                            console.warn('MathJax typeset error:', err);
+                        });
+                    } else if (window.MathJax && window.MathJax.startup) {
+                        // MathJax still loading, wait for it
+                        window.MathJax.startup.promise.then(() => {
+                            if (window.MathJax.typesetPromise) {
+                                window.MathJax.typesetPromise([problemTextEl]).catch(err => {
+                                    console.warn('MathJax typeset error:', err);
+                                });
+                            }
+                        });
                     }
-                }
-                waitForMathJax(15000).then(typesetProblemMath);
-                [500, 2000, 5000].forEach(ms => setTimeout(typesetProblemMath, ms));
+                }, 100);
                 
                 // Handle problem image
                 const problemImage = document.getElementById('problem-image');
@@ -937,7 +930,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                     else {
                         console.log('⚠️ No pre-built problem visualization, generating at runtime');
                         console.log('⚠️ Data object:', data);
-                        problemVisualizer.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Generating visualization...</p>';
+                        problemVisualizer.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Loading...</p>';
                         generateQuestionVisualization(data.problem);
                     }
                 }
@@ -980,7 +973,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
             // Clear problem visualizer completely
             const problemVisualizer = document.getElementById('problem-visualizer-content');
             if (problemVisualizer) {
-                problemVisualizer.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Generating visualization...</p>';
+                problemVisualizer.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Loading...</p>';
             }
             
             // Clear all step visualizations (remove all step cards)
@@ -1479,23 +1472,12 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
         }
 
         // Render steps dynamically
-        /** Unescape literal \\n and \\* from API/JSON, then convert newlines/bullets for HTML. */
-        function processStepExplanation(text) {
-            if (!text || typeof text !== 'string') return text;
-            let s = text;
-            // Literal backslash-n and backslash-asterisk (from JSON/API) -> real newline and *
-            s = s.replace(/\\n/g, '\n').replace(/\\\*/g, '*');
-            // Newlines -> <br> so they display in HTML
-            s = s.replace(/\n/g, '<br>\n');
-            // Optional: lines that start with * or - (markdown bullets) -> wrap in list for readability
-            s = s.replace(/(<br>\n)([\s]*)[*\-]\s+([^<\n]+)/g, '$1$2• $3');
-            return processMarkdownBold(s);
-        }
         // Convert markdown-style bold (**text**) to HTML bold
         function processMarkdownBold(text) {
             if (!text) return text;
             // Convert **text** to <strong>text</strong>
             // Match **text** but avoid matching within HTML tags or MathJax delimiters
+            // Use a more robust regex that handles multiple bold sections
             return text.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
         }
 
@@ -1594,18 +1576,43 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 stepExplanation.className = 'step-explanation';
                 stepExplanation.id = `step-explanation-${index}`;
                 // Process markdown bold formatting (reuse explanationText from above)
-                stepExplanation.innerHTML = processStepExplanation(explanationText || 'No explanation provided.');
-                // Wait for MathJax (async from CDN; often late on production) then render math
-                waitForMathJax(8000).then(() => {
+                stepExplanation.innerHTML = processMarkdownBold(explanationText || 'No explanation provided.');
+                // Trigger MathJax to render math notation
+                const renderMath = () => {
                     if (window.MathJax && window.MathJax.typesetPromise) {
                         window.MathJax.typesetPromise([stepExplanation]).catch((err) => {
                             console.log('MathJax rendering error:', err);
                         });
+                    } else if (window.MathJax && window.MathJax.startup) {
+                        // MathJax is still loading, wait for it
+                        window.MathJax.startup.promise.then(() => {
+                            if (window.MathJax.typesetPromise) {
+                                window.MathJax.typesetPromise([stepExplanation]).catch((err) => {
+                                    console.log('MathJax rendering error:', err);
+                                });
+                            }
+                        });
                     }
-                });
+                };
+                // Try immediately, or wait for MathJax to load
+                if (document.readyState === 'complete') {
+                    renderMath();
+                } else {
+                    window.addEventListener('load', renderMath);
+                    // Also try after a short delay
+                    setTimeout(renderMath, 500);
+                }
 
                 // Create input section
                 const isStepCompleted = savedState && savedState.completedSteps && savedState.completedSteps[index];
+                const isRevealed = savedState && savedState.stepStates && savedState.stepStates.revealed && savedState.stepStates.revealed[index];
+                const correctAnswerRaw = step.correctAnswer || step.expectedAnswer || '';
+                const correctAnswerDisplay = correctAnswerRaw.split('|').map(s => s.trim()).filter(Boolean);
+                const primaryAnswer = correctAnswerDisplay[0] || '—';
+                const otherAccepted = correctAnswerDisplay.length > 1 ? correctAnswerDisplay.slice(1).join(', ') : '';
+                const feedbackText = isStepCompleted
+                    ? (isRevealed ? `Correct answer: ${primaryAnswer}${otherAccepted ? ` (also accepted: ${otherAccepted})` : ''}` : 'Correct! ✓')
+                    : '';
                 const stepInputSection = document.createElement('div');
                 stepInputSection.className = 'step-input-section';
                 stepInputSection.innerHTML = `
@@ -1628,7 +1635,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                     >
                         Submit
                     </button>
-                    <div class="step-feedback" id="step-feedback-${index}" style="display: ${isStepCompleted ? 'block' : 'none'};">${isStepCompleted ? 'Correct! ✓' : ''}</div>
+                    <div class="step-feedback" id="step-feedback-${index}" style="display: ${isStepCompleted ? 'block' : 'none'};">${feedbackText}</div>
                     <button 
                         class="reveal-answer-btn" 
                         id="reveal-answer-${index}"
@@ -1662,8 +1669,8 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                     }
                 }
                 
-                // Render math in the label once MathJax is ready
-                waitForMathJax(8000).then(() => {
+                // Trigger MathJax to render math in the label
+                setTimeout(() => {
                     if (window.MathJax && window.MathJax.typesetPromise) {
                         const label = stepInputSection.querySelector('.step-input-label');
                         if (label) {
@@ -1672,7 +1679,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                             });
                         }
                     }
-                });
+                }, 200 + (index * 50));
 
                 // Create visualization container wrapper
                 const vizWrapper = document.createElement('div');
@@ -1740,6 +1747,16 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 stepContent.appendChild(vizWrapper); // Use wrapper instead of stepVisualization directly
                 stepCard.appendChild(stepHeader);
                 stepCard.appendChild(stepContent);
+                // Use pre-generated WAV from manifest when available (Gemini 2.5 TTS)
+                if (step.audioPath) {
+                    const audioEl = document.createElement('audio');
+                    audioEl.id = `step-audio-element-${index}`;
+                    audioEl.preload = 'auto';
+                    audioEl.src = step.audioPath;
+                    audioEl.style.display = 'none';
+                    stepCard.appendChild(audioEl);
+                    audioElements.set(index, { element: audioEl, type: 'audio' });
+                }
                 stepsList.appendChild(stepCard);
                 
                 // Generate/load visualization for ALL steps AFTER element is in DOM
@@ -1753,11 +1770,6 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                         if (vizEl) {
                             console.log(`✅ [renderSteps] Loading PRE-GENERATED SVG for step ${index}`);
                             vizEl.innerHTML = step.visualization;
-                            waitForMathJax(8000).then(() => {
-                                if (window.MathJax && window.MathJax.typesetPromise) {
-                                    window.MathJax.typesetPromise([vizEl]).catch(function (err) { console.warn('MathJax viz error:', err); });
-                                }
-                            });
                         }
                     }, 100 + (index * 50));
                 }
@@ -1892,15 +1904,8 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                     }
                 }
                 
-                // Automatically generate and embed audio for each step
-                // Generate audio asynchronously without blocking rendering
-                setTimeout(async () => {
-                    try {
-                        await generateAndEmbedStepAudio(currentQuestionIndex, index, step);
-                    } catch (error) {
-                        console.error(`Error generating audio for step ${index}:`, error);
-                    }
-                }, 100 * (index + 1)); // Stagger audio generation to avoid overwhelming the API
+                // Audio is generated in the backend loop (generate.py); no client-side generation on page load.
+                // Only pre-generated WAV from manifest (step.audioPath) is used; play on click.
                 
                 } catch (error) {
                     console.error(`❌ [renderSteps] Error building step ${index}:`, error);
@@ -1922,7 +1927,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
             attachResourcesHandlers();
             
             // Pre-fetch YouTube videos for all steps in the background
-            preFetchStepVideos(steps);
+            // preFetchStepVideos(steps); // Disabled to prevent YouTube API quota exhaustion
             
             // DEBUG: Watch for button removal
             console.log('🔍 Setting up button removal detector...');
@@ -2001,9 +2006,9 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
             });
         }
 
-        // Attach resources button handlers (delegation is done in document listener below)
+        // Attach resources button handlers (called after renderSteps)
         function attachResourcesHandlers() {
-            // Handlers attached via document-level delegation so "Feeling stuck?" works when embedded
+            // Handlers are attached via document-level delegation below
         }
 
         // Handle resources button click (event delegation so it works for dynamically added buttons)
@@ -2027,8 +2032,8 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 return;
             }
 
-            const resourcesButton = document.getElementById(`step-resources-${stepIndex}`);
             modal.classList.add('active');
+            const resourcesButton = document.getElementById(`step-resources-${stepIndex}`);
             modalTitle.textContent = `Learning Resources - Step ${stepIndex + 1}`;
 
             // Check if videos are already cached
@@ -2044,7 +2049,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
 
             // If not cached, show loading and fetch
             modalBody.innerHTML = '<div class="resources-loading">Finding relevant YouTube videos...</div>';
-            if (resourcesButton) resourcesButton.classList.add('loading');
+            resourcesButton.classList.add('loading');
 
             try {
                 // Fetch YouTube videos for this step
@@ -2063,7 +2068,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 console.error('Error fetching resources:', error);
                 modalBody.innerHTML = `<div class="resources-error">Error loading resources: ${error.message}</div>`;
             } finally {
-                if (resourcesButton) resourcesButton.classList.remove('loading');
+                resourcesButton.classList.remove('loading');
             }
         }
 
@@ -2172,8 +2177,9 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                             console.error(`🎥 [YOUTUBE] Error response:`, errorText);
                             
                             if (response.status === 401) {
-                                console.error(`🎥 [YOUTUBE] 🔐 AUTHENTICATION ERROR: Invalid JWT or missing Supabase anon key`);
-                                console.error(`🎥 [YOUTUBE] 🔐 Ensure the host sends anonKey in postMessage auth, or set meta name="supabase-anon-key"`);
+                                console.error(`🎥 [YOUTUBE] 🔐 AUTHENTICATION ERROR: Function requires user authentication`);
+                                console.error(`🎥 [YOUTUBE] 🔐 This function is designed for lessons (requires user JWT), not steps`);
+                                console.error(`🎥 [YOUTUBE] 🔐 Solution: Create a new Edge Function that accepts topic/contentContext without user auth`);
                             }
                             
                             if (response.status === 404) {
@@ -2209,9 +2215,11 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
             // Use the new step-based YouTube recommendations function
             const youtubeApiUrl = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/youtube_step_recommendations`;
 
-            // Build topic from step explanation and problem context
-            const topic = step.explanation || `Step ${stepIndex + 1}`;
-            const problemContext = homeworkData.problem ? homeworkData.problem.text : '';
+            // Build question + step payload for Gemini (create search query) then YouTube Data API
+            const questionText = homeworkData.problem ? (homeworkData.problem.text || '').trim() : '';
+            const stepExplanation = (step.explanation || '').trim();
+            const stepQuestion = (step.inputLabel || '').trim();
+            const topic = [stepExplanation, stepQuestion].filter(Boolean).join(' ') || `Step ${stepIndex + 1}`;
 
             const headers = {
                 'Content-Type': 'application/json',
@@ -2219,9 +2227,7 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 'apikey': supabaseKey
             };
 
-            console.log('🎥 [YOUTUBE] Fetching videos for step', stepIndex + 1);
-            console.log('🎥 [YOUTUBE] API URL:', youtubeApiUrl);
-            console.log('🎥 [YOUTUBE] Topic:', topic.substring(0, 50));
+            console.log('🎥 [YOUTUBE] Fetching videos for step', stepIndex + 1, '(question + step → Gemini → YouTube)');
 
             try {
                 const response = await fetch(youtubeApiUrl, {
@@ -2229,9 +2235,9 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                     headers: headers,
                     body: JSON.stringify({
                         topic: topic,
-                        contentContext: problemContext,
+                        contentContext: questionText,
                         count: 3,
-                        preferredDurationMin: [5, 20]
+                        preferredDurationMin: [3, 25]
                     })
                 });
 
@@ -2354,6 +2360,22 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
             }).join('');
 
             modalBody.innerHTML = `<div class="resources-videos-list">${videosHTML}</div>`;
+
+            // Render math in "Recommended for" text (e.g. $x$, $+5$)
+            const runMathJax = () => {
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    window.MathJax.typesetPromise([modalBody]).catch((err) => {
+                        console.warn('MathJax typeset error in resources modal:', err);
+                    });
+                }
+            };
+            setTimeout(() => {
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    runMathJax();
+                } else if (window.MathJax && window.MathJax.startup) {
+                    window.MathJax.startup.promise.then(runMathJax);
+                }
+            }, 50);
         }
 
         // Close modal handlers
@@ -2736,21 +2758,29 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
         }
 
         function handleRevealAnswer(e) {
-            const stepIndex = parseInt(e.target.getAttribute('data-step-index'));
+            const revealBtn = e.target.closest('.reveal-answer-btn');
+            if (!revealBtn) return;
+            const stepIndex = parseInt(revealBtn.getAttribute('data-step-index'), 10);
+            if (isNaN(stepIndex)) return;
             const step = homeworkData.steps[stepIndex];
-            const correctAnswer = step.correctAnswer || step.expectedAnswer || '';
+            if (!step) return;
+            const correctAnswerRaw = step.correctAnswer || step.expectedAnswer || '';
+            const parts = correctAnswerRaw.split('|').map(s => s.trim()).filter(Boolean);
+            const primaryAnswer = parts[0] || '—';
+            const otherAccepted = parts.length > 1 ? parts.slice(1).join(', ') : '';
+            const displayText = `Correct answer: ${primaryAnswer}${otherAccepted ? ` (also accepted: ${otherAccepted})` : ''}`;
             const feedback = document.getElementById(`step-feedback-${stepIndex}`);
             const stepCard = document.getElementById(`step-${stepIndex}`);
             const input = document.getElementById(`step-input-${stepIndex}`);
             const submitBtn = document.getElementById(`step-submit-${stepIndex}`);
-            const revealBtn = e.target;
 
-            // Reveal the answer
             stepStates.revealed[stepIndex] = true;
-            feedback.textContent = `The correct answer is: ${correctAnswer}`;
-            feedback.className = 'step-feedback revealed';
-            feedback.style.display = 'block';
-            revealBtn.style.display = 'none';
+            if (feedback) {
+                feedback.textContent = displayText;
+                feedback.className = 'step-feedback revealed';
+                feedback.style.display = 'block';
+            }
+            if (revealBtn) revealBtn.style.display = 'none';
             
             // Disable input and submit
             input.disabled = true;
@@ -2765,7 +2795,10 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 questionStates[currentQuestionIndex].completedSteps = {};
             }
             questionStates[currentQuestionIndex].completedSteps[stepIndex] = true;
-            
+            if (!questionStates[currentQuestionIndex].stepStates) questionStates[currentQuestionIndex].stepStates = { attempts: {}, completed: {}, revealed: {} };
+            if (!questionStates[currentQuestionIndex].stepStates.revealed) questionStates[currentQuestionIndex].stepStates.revealed = {};
+            questionStates[currentQuestionIndex].stepStates.revealed[stepIndex] = true;
+
             // Check if this is the final step of the question
             const isFinalStep = stepIndex === homeworkData.steps.length - 1;
             if (isFinalStep) {
@@ -3196,67 +3229,37 @@ CRITICAL REQUIREMENTS:
             }
 
             try {
-                const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
-                
-                // Create a prompt for generating a visualization of the overall question
-                const prompt = `You are creating ONLY a diagram illustration. Generate a detailed, accurate SVG diagram that visualizes this homework problem:
+                // Use Gemini image-generation model (Nano Banana / 2.5 Flash Image)
+                const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
+                const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent`;
+
+                const imagePrompt = `Create a single educational diagram image that visualizes this homework problem. Do not include any question text, instructions, answers, or solutions in the image.
 
 Title: ${problem.title || 'Homework Problem'}
 Description: ${problem.text || 'No description'}
 
-CRITICAL REQUIREMENTS - READ CAREFULLY:
-- Return ONLY the SVG code (no markdown, no explanations, no code blocks, no text outside SVG)
-- Use viewBox="0 0 500 500" or appropriate dimensions
-- Create a visual representation that helps students understand what the problem is asking
-- Include relevant diagrams, structures, labels, or visual elements mentioned in the problem
-- Use appropriate colors and styling to make it clear and educational
-- Make it scientifically/educationally accurate
-- If the problem mentions specific structures (like cell organelles, geometric shapes, physics diagrams), include them with proper detail
-- Add labels ONLY for variables or structures (e.g., "w", "l", "x", "r", "A", "B", "C" as letters pointing to structures with arrows)
-- DO NOT include ANY of the following in the image:
-  * Question text (e.g., "What is...", "Identify...", "Answer...", "Find...", "Solve...")
-  * Instructions (e.g., "Study the diagram", "Answer the questions")
-  * Titles or headers (e.g., "Area of a Circle", "Finding Dimensions", "Solving Equations")
-  * Answer blanks or lines
-  * Any educational worksheet text
-  * SOLUTIONS OR ANSWERS (e.g., "Final Dimensions: w = 8m, l = 19m", "Answer:", "Solution:", "Final Answer:", "x = 4", etc.)
-  * Solved numerical values (e.g., "8m", "19m", "4" as answers - only show variables like "w", "l", "x", "r" and expressions like "2w+3", "r=5" but NOT solved results)
-  * Text boxes with answers
-  * Any text that reveals the solution to the problem
-  * Problem setup text that includes solutions
-  * Formulas with solved values (e.g., "A = π(5)² = 25π" - DO NOT show the "= 25π" part, only show "A = πr²" with r labeled)
-  * Solution steps or calculations
-- The diagram should show the PROBLEM SETUP ONLY - variables, relationships, what's given - NOT the solution
-- For math problems: Show variables (w, l, x, r, etc.) and expressions (2w+3, r=5, etc.) but NOT the solved values
-- The diagram should be a PURE illustration - just the visual diagram with variable/structure labels
-- NO TEXT ELEMENTS except variable labels (w, l, x, y, r) or structure labels (A, B, C) with arrows
-- NO answers, NO solutions, NO final values, NO solved calculations
+Requirements for the image:
+- Show only the problem setup: diagrams, shapes, structures, or relationships mentioned in the problem.
+- Include labels only for variables or parts (e.g. w, l, x, r, A, B, C) with arrows where helpful.
+- Use clear, readable visuals suitable for a student. No saturated colors; keep it clean and educational.
+- If the problem involves geometry, physics, biology, or math, draw the relevant diagram with variable labels but no solved values or final answers.
+- Style: simple diagram or illustration, no decorative text, no titles, no "Answer" or "Solution" text.`;
 
-The SVG should contain ONLY the diagram illustration showing the problem setup, nothing else.`;
-
-                // LOG THE EXACT PROMPT BEING SENT
-                console.log('═══════════════════════════════════════════════════════════');
-                console.log('🖼️ [PROBLEM VISUALIZATION] EXACT PROMPT BEING SENT TO API:');
-                console.log('═══════════════════════════════════════════════════════════');
-                console.log(prompt);
-                console.log('═══════════════════════════════════════════════════════════');
-                console.log('📊 Prompt length:', prompt.length, 'characters');
+                console.log('🖼️ [PROBLEM VISUALIZATION] Generating image via Gemini image model:', GEMINI_IMAGE_MODEL);
                 console.log('📋 Problem title:', problem.title);
-                console.log('📝 Problem text:', problem.text);
-                console.log('═══════════════════════════════════════════════════════════');
+                console.log('📝 Problem text (length):', (problem.text || '').length);
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
-                
-                console.log('Generating question visualization...');
-                
+                const timeoutId = setTimeout(() => controller.abort(), 120000);
+
                 const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: [{
-                            parts: [{ text: prompt }]
-                        }]
+                        contents: [{ parts: [{ text: imagePrompt }] }],
+                        generationConfig: {
+                            responseModalities: ['TEXT', 'IMAGE']
+                        }
                     }),
                     signal: controller.signal
                 });
@@ -3271,84 +3274,48 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                 }
 
                 const data = await response.json();
-                console.log('Question visualization response status:', response.status);
-                console.log('Question visualization response data:', data);
-
-                if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-                    const svgText = data.candidates[0].content.parts[0].text;
-                    
-                    // LOG THE RAW RESPONSE
-                    console.log('═══════════════════════════════════════════════════════════');
-                    console.log('🖼️ [PROBLEM VISUALIZATION] RAW SVG CODE FROM API:');
-                    console.log('═══════════════════════════════════════════════════════════');
-                    console.log('📏 Raw SVG length:', svgText.length, 'characters');
-                    console.log('📄 First 500 characters:', svgText.substring(0, 500));
-                    console.log('📄 Last 500 characters:', svgText.substring(Math.max(0, svgText.length - 500)));
-                    console.log('═══════════════════════════════════════════════════════════');
-                    // Clean up the SVG text (remove markdown code blocks if present)
-                    let cleanSvg = svgText.trim();
-                    if (cleanSvg.startsWith('```')) {
-                        console.log('⚠️ SVG code starts with markdown code block, cleaning...');
-                        cleanSvg = cleanSvg.replace(/```svg\n?/i, '').replace(/```\n?$/, '');
-                    } else if (cleanSvg.startsWith('<svg')) {
-                        // Already clean
-                    } else {
-                        // Try to extract SVG from the text
-                        const svgMatch = cleanSvg.match(/<svg[\s\S]*?<\/svg>/i);
-                        if (svgMatch) {
-                            console.log('⚠️ SVG code wrapped in other text, extracting...');
-                            cleanSvg = svgMatch[0];
-                        }
-                    }
-                    
-                    // Check for solution text in the SVG
-                    const solutionPatterns = [
-                        /solution:/i,
-                        /answer:/i,
-                        /final.*answer/i,
-                        /final.*dimensions/i,
-                        /≈\s*\d+\.?\d*/,
-                        /=\s*\d+\.?\d*/,
-                        /formula:/i
-                    ];
-                    const foundSolutions = solutionPatterns.filter(pattern => pattern.test(cleanSvg));
-                    if (foundSolutions.length > 0) {
-                        console.log('ℹ️ SVG contains mathematical notation (will be evaluated by QA)');
-                    }
-                    
-                    // LOG FINAL PROCESSED SVG
-                    console.log('═══════════════════════════════════════════════════════════');
-                    console.log('🖼️ [PROBLEM VISUALIZATION] FINAL PROCESSED SVG:');
-                    console.log('═══════════════════════════════════════════════════════════');
-                    console.log('📏 Final SVG length:', cleanSvg.length, 'characters');
-                    console.log('📄 Full SVG code:', cleanSvg);
-                    console.log('═══════════════════════════════════════════════════════════');
-                    
-                    visualizerEl.innerHTML = cleanSvg;
-                    
-                    // Save to cache
-                    if (!questionStates[questionIndex]) {
-                        questionStates[questionIndex] = {};
-                    }
-                    questionStates[questionIndex].problemVisualization = cleanSvg;
-                    console.log(`✅ Problem visualization saved to cache for question ${questionIndex + 1}`);
-                    
-                    // Export component for evaluation pipeline
-                    exportComponent({
-                        id: `Q${questionIndex + 1}_SVG`,
-                        type: 'question_svg',
-                        questionId: questionIndex,
-                        stepId: null,
-                        html: cleanSvg,
-                        metadata: {
-                            title: problem.title || 'Question',
-                            text: problem.text || '',
-                            source: 'question_visualization'
-                        }
-                    });
-                } else {
-                    visualizerEl.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">Unable to generate visualization.</p>';
+                const parts = data.candidates?.[0]?.content?.parts;
+                if (!parts || !parts.length) {
+                    visualizerEl.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">No image in response.</p>';
+                    return;
                 }
+
+                let imageDataUrl = null;
+                let caption = '';
+                for (const part of parts) {
+                    const inline = part.inlineData || part.inline_data;
+                    if (inline && inline.data) {
+                        const mime = inline.mimeType || inline.mime_type || 'image/png';
+                        imageDataUrl = `data:${mime};base64,${inline.data}`;
+                        break;
+                    }
+                    if (part.text) caption += part.text;
+                }
+
+                if (!imageDataUrl) {
+                    visualizerEl.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">No image generated. Try again.</p>';
+                    return;
+                }
+
+                const imgHtml = `<div class="problem-viz-image-wrap"><img src="${imageDataUrl}" alt="Problem diagram" class="problem-viz-image" loading="lazy" decoding="async" /></div>`;
+                visualizerEl.innerHTML = imgHtml;
+
+                if (!questionStates[questionIndex]) questionStates[questionIndex] = {};
+                questionStates[questionIndex].problemVisualization = imgHtml;
+                console.log('✅ Problem visualization (image) saved to cache for question', questionIndex + 1);
+
+                exportComponent({
+                    id: `Q${questionIndex + 1}_SVG`,
+                    type: 'question_svg',
+                    questionId: questionIndex,
+                    stepId: null,
+                    html: imgHtml,
+                    metadata: {
+                        title: problem.title || 'Question',
+                        text: problem.text || '',
+                        source: 'question_visualization_image'
+                    }
+                });
             } catch (error) {
                 if (error.name === 'AbortError') {
                     console.error('Question visualization timed out');
@@ -3611,7 +3578,7 @@ CRITERIA:
         // Generate image manually using Gemini (creates SVG)
         async function generateManualImage(stepIndex, imageDescription, visualizationEl, GEMINI_API_KEY, questionIndexOverride = null) {
             const questionIndex = questionIndexOverride !== null ? questionIndexOverride : currentQuestionIndex;
-            const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
+            const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent';
             
             // Clean the image description to remove any answer/solution text that might have been included
             let cleanedDescription = imageDescription;
@@ -3842,15 +3809,22 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                 explanationEl.innerHTML = htmlContent;
                 // Trigger MathJax to render math notation
                 const renderMath = () => {
-                    waitForMathJax(8000).then(() => {
-                        if (window.MathJax && window.MathJax.typesetPromise) {
-                            window.MathJax.typesetPromise([explanationEl]).catch((err) => {
-                                console.log('MathJax rendering error:', err);
-                            });
-                        }
-                    });
+                    if (window.MathJax && window.MathJax.typesetPromise) {
+                        window.MathJax.typesetPromise([explanationEl]).catch((err) => {
+                            console.log('MathJax rendering error:', err);
+                        });
+                    } else if (window.MathJax && window.MathJax.startup) {
+                        window.MathJax.startup.promise.then(() => {
+                            if (window.MathJax.typesetPromise) {
+                                window.MathJax.typesetPromise([explanationEl]).catch((err) => {
+                                    console.log('MathJax rendering error:', err);
+                                });
+                            }
+                        });
+                    }
                 };
-                setTimeout(renderMath, 50);
+                // Small delay to ensure DOM is updated
+                setTimeout(renderMath, 100);
             }
         }
 
@@ -3885,12 +3859,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
         const audioStates = new Map(); // Track audio state per step
         const audioElements = new Map(); // Store audio elements per step
 
-        // Feeling stuck? — open resources modal (delegated so it works when embedded / dynamic steps)
         document.addEventListener('click', async (e) => {
-            if (e.target.closest('.step-resources-button')) {
-                await handleResourcesClick(e);
-                return;
-            }
             if (e.target.closest('.step-microphone-button')) {
                 const button = e.target.closest('.step-microphone-button');
                 const stepIndex = parseInt(button.getAttribute('data-step-index'));
@@ -3926,51 +3895,67 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             }
         });
 
-        // Google Cloud TTS API configuration
-        // Using Supabase Edge Function as secure proxy
-        // Set SUPABASE_URL and SUPABASE_ANON_KEY from your Supabase project
-        // The edge function URL will be: ${SUPABASE_URL}/functions/v1/tts
+        // Feeling stuck? — open resources modal (delegated so it works for dynamic steps)
+        document.addEventListener('click', async (e) => {
+            if (e.target.closest('.step-resources-button')) {
+                await handleResourcesClick(e);
+            }
+        });
+
+        // Gemini 2.5 TTS (primary) / Supabase proxy (optional) / browser TTS fallback
+        const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+        const GEMINI_TTS_VOICE = (() => {
+            const meta = document.querySelector('meta[name="gemini-tts-voice"]');
+            return (meta && meta.getAttribute('content')) || 'Kore';
+        })();
         
-        // Get Supabase configuration: meta tags first, then window globals (set by host via postMessage)
-        // Prefer anon key for edge functions (e.g. youtube_step_recommendations) to avoid 401 Invalid JWT.
+        // Get Supabase configuration from meta tags or use defaults
         function getSupabaseConfig() {
             const supabaseUrlMeta = document.querySelector('meta[name="supabase-url"]');
             const supabaseKeyMeta = document.querySelector('meta[name="supabase-anon-key"]');
-            let supabaseUrl = supabaseUrlMeta ? (supabaseUrlMeta.getAttribute('content') || '').trim() : '';
-            let supabaseKey = supabaseKeyMeta ? (supabaseKeyMeta.getAttribute('content') || '').trim() : '';
-            if (!supabaseUrl && typeof window.__SUPABASE_URL__ === 'string') supabaseUrl = (window.__SUPABASE_URL__ || '').replace(/\/$/, '');
-            if (!supabaseKey && typeof window.__SUPABASE_ANON_KEY__ === 'string') supabaseKey = (window.__SUPABASE_ANON_KEY__ || '').trim();
-            if (!supabaseKey && typeof window.__SUPABASE_TOKEN__ === 'string') supabaseKey = (window.__SUPABASE_TOKEN__ || '').trim();
-            if (supabaseKey) supabaseKey = supabaseKey.trim();
+            
+            const supabaseUrl = supabaseUrlMeta ? supabaseUrlMeta.getAttribute('content') : '';
+            let supabaseKey = supabaseKeyMeta ? supabaseKeyMeta.getAttribute('content') : '';
+            
+            // Trim any whitespace that might have been accidentally added
+            if (supabaseKey) {
+                supabaseKey = supabaseKey.trim();
+            }
+            
             // Log configuration for debugging
             console.log('🎥 [YOUTUBE] Config check - URL:', supabaseUrl ? 'Present' : 'MISSING');
             console.log('🎥 [YOUTUBE] Config check - Key:', supabaseKey ? `Present (${supabaseKey.length} chars)` : 'MISSING');
-            if (supabaseKey && supabaseKey.length < 50) console.warn('🎥 [YOUTUBE] Warning: API key seems too short, might be invalid');
-            if (supabaseKey && !supabaseKey.startsWith('eyJ')) console.warn('🎥 [YOUTUBE] Warning: API key does not appear to be a valid JWT token (should start with "eyJ")');
+            console.log('🎥 [YOUTUBE] Key starts with:', supabaseKey ? supabaseKey.substring(0, 20) + '...' : 'N/A');
+            
+            // Check if key looks valid (JWT tokens are typically long)
+            if (supabaseKey && supabaseKey.length < 50) {
+                console.warn('🎥 [YOUTUBE] Warning: API key seems too short, might be invalid');
+            }
+            
+            // Verify it's a JWT token (should start with eyJ)
+            if (supabaseKey && !supabaseKey.startsWith('eyJ')) {
+                console.warn('🎥 [YOUTUBE] Warning: API key does not appear to be a valid JWT token (should start with "eyJ")');
+            }
+            
             return { supabaseUrl, supabaseKey };
         }
         
-        // Build TTS proxy URL from Supabase configuration
+        // Build TTS proxy URL from Supabase configuration (optional; used when no Gemini key)
         function getTTSProxyURL() {
             const { supabaseUrl } = getSupabaseConfig();
             if (supabaseUrl) {
-                // Remove trailing slash if present
                 const baseUrl = supabaseUrl.replace(/\/$/, '');
                 return `${baseUrl}/functions/v1/tts`;
             }
-            return ''; // Fallback to empty (will use browser TTS)
+            return '';
         }
         
         const TTS_PROXY_URL = getTTSProxyURL();
-        const TTS_API_KEY = ''; // Not needed when using Supabase Edge Function
         
-        // Get TTS API key from meta tag if available, otherwise use Gemini API key as fallback
-        function getTTSApiKey() {
+        // Gemini API key for Gemini 2.5 TTS (same key as for chat)
+        function getGeminiTTSApiKey() {
             const ttsApiKeyMeta = document.querySelector('meta[name="tts-api-key"]');
-            if (ttsApiKeyMeta) {
-                return ttsApiKeyMeta.getAttribute('content');
-            }
-            // Fallback to Gemini API key (may not work for TTS, but we'll try)
+            if (ttsApiKeyMeta) return ttsApiKeyMeta.getAttribute('content');
             const geminiApiKeyMeta = document.querySelector('meta[name="gemini-api-key"]');
             return geminiApiKeyMeta ? geminiApiKeyMeta.getAttribute('content') : '';
         }
@@ -3978,112 +3963,119 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
         // Cache for generated audio URLs
         const audioCache = new Map();
         
-        // Generate audio using Google Cloud Text-to-Speech API
+        // Build WAV blob from PCM bytes (16-bit mono 24kHz, matching generate.py)
+        function pcmToWavBlob(pcmBytes) {
+            const sampleRate = 24000;
+            const numChannels = 1;
+            const bitsPerSample = 16;
+            const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+            const dataSize = pcmBytes.length;
+            const headerSize = 44;
+            const buffer = new ArrayBuffer(headerSize + dataSize);
+            const view = new DataView(buffer);
+            const writeStr = (offset, str) => {
+                for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+            };
+            writeStr(0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeStr(8, 'WAVE');
+            writeStr(12, 'fmt ');
+            view.setUint32(16, 16, true); // chunk size
+            view.setUint16(20, 1, true);  // PCM
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, numChannels * (bitsPerSample / 8), true);
+            view.setUint16(34, bitsPerSample, true);
+            writeStr(36, 'data');
+            view.setUint32(40, dataSize, true);
+            new Uint8Array(buffer).set(pcmBytes, headerSize);
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+        
+        // Generate audio using Gemini 2.5 TTS (preferred) or proxy fallback
         async function generateTTSAudio(text, questionIndex, stepIndex) {
-            // Check cache first with composite key (question + step)
             const cacheKey = `q${questionIndex}-s${stepIndex}`;
             if (audioCache.has(cacheKey)) {
                 return audioCache.get(cacheKey);
             }
             
-            const apiKey = TTS_API_KEY || getTTSApiKey();
+            const geminiKey = getGeminiTTSApiKey();
             
-            if (!apiKey && !TTS_PROXY_URL) {
-                console.warn('No TTS API key or proxy URL configured. Using browser TTS fallback.');
+            if (!geminiKey && !TTS_PROXY_URL) {
+                console.warn('No Gemini API key or TTS proxy configured. Using browser TTS fallback.');
                 return null;
             }
             
             try {
-                // Use Google Cloud Text-to-Speech API
-                // Option 1: Use backend proxy (recommended)
                 let audioUrl;
                 
-                if (TTS_PROXY_URL) {
-                    // Call Supabase Edge Function
-                    const { supabaseKey } = getSupabaseConfig();
-                    const headers = {
-                        'Content-Type': 'application/json',
+                // Prefer Gemini 2.5 TTS when API key is available
+                if (geminiKey) {
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+                    const payload = {
+                        contents: [{ parts: [{ text: text }] }],
+                        generationConfig: {
+                            responseModalities: ['AUDIO'],
+                            speechConfig: {
+                                voiceConfig: {
+                                    prebuiltVoiceConfig: { voiceName: GEMINI_TTS_VOICE }
+                                }
+                            }
+                        }
                     };
-                    
-                    // Add Supabase auth header if available
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) {
+                        const err = await response.text();
+                        throw new Error(`Gemini TTS: ${response.status} ${err}`);
+                    }
+                    const data = await response.json();
+                    const candidates = (data && data.candidates) || [];
+                    const parts = (candidates[0] && candidates[0].content && candidates[0].content.parts) || [];
+                    const inlineData = (parts[0] && parts[0].inlineData) || {};
+                    const b64 = inlineData.data;
+                    if (!b64) {
+                        const reason = (data.promptFeedback && data.promptFeedback.blockReason) || 'no audio in response';
+                        throw new Error(`Gemini TTS: ${reason}`);
+                    }
+                    const binary = atob(b64);
+                    const pcmBytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) pcmBytes[i] = binary.charCodeAt(i);
+                    const wavBlob = pcmToWavBlob(pcmBytes);
+                    audioUrl = URL.createObjectURL(wavBlob);
+                } else if (TTS_PROXY_URL) {
+                    // Proxy fallback (proxy should use Gemini TTS or return WAV/MP3)
+                    const { supabaseKey } = getSupabaseConfig();
+                    const headers = { 'Content-Type': 'application/json' };
                     if (supabaseKey) {
                         headers['Authorization'] = `Bearer ${supabaseKey}`;
                         headers['apikey'] = supabaseKey;
                     }
-                    
                     const response = await fetch(TTS_PROXY_URL, {
                         method: 'POST',
                         headers: headers,
                         body: JSON.stringify({
                             text: text,
-                            languageCode: 'en-US',
-                            voiceName: 'en-US-Neural2-D',
-                            audioEncoding: 'MP3'
+                            voiceName: GEMINI_TTS_VOICE,
+                            model: GEMINI_TTS_MODEL
                         })
                     });
-                    
-                    if (!response.ok) {
-                        throw new Error(`TTS API error: ${response.statusText}`);
-                    }
-                    
+                    if (!response.ok) throw new Error(`TTS proxy: ${response.statusText}`);
                     const blob = await response.blob();
                     audioUrl = URL.createObjectURL(blob);
-                    } else {
-                        // Option 2: Direct API call (requires CORS and API key)
-                        // This is a simplified approach - for production, use a backend proxy
-                        // Note: This will likely fail due to CORS restrictions unless CORS is enabled
-                        const TTS_API_ENDPOINT = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
-                    
-                    const requestBody = {
-                        input: { text: text },
-                        voice: {
-                            languageCode: 'en-US',
-                            name: 'en-US-Neural2-D',
-                            ssmlGender: 'NEUTRAL'
-                        },
-                        audioConfig: {
-                            audioEncoding: 'MP3',
-                            speakingRate: 1.0,
-                            pitch: 0,
-                            volumeGainDb: 0.0
-                        }
-                    };
-                    
-                    const response = await fetch(TTS_API_ENDPOINT, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(requestBody)
-                    });
-                    
-                    if (!response.ok) {
-                        // Fallback to browser TTS if API fails
-                        console.warn('TTS API failed, using browser fallback');
-                        return null;
-                    }
-                    
-                    const data = await response.json();
-                    if (data.audioContent) {
-                        // Convert base64 to blob
-                        const audioData = atob(data.audioContent);
-                        const audioArray = new Uint8Array(audioData.length);
-                        for (let i = 0; i < audioData.length; i++) {
-                            audioArray[i] = audioData.charCodeAt(i);
-                        }
-                        const blob = new Blob([audioArray], { type: 'audio/mp3' });
-                        audioUrl = URL.createObjectURL(blob);
-                    } else {
-                        throw new Error('No audio content in response');
-                    }
                 }
                 
-                // Cache the audio URL                
-                audioCache.set(cacheKey, audioUrl);
-                return audioUrl;
+                if (audioUrl) {
+                    audioCache.set(cacheKey, audioUrl);
+                    return audioUrl;
+                }
+                return null;
             } catch (error) {
                 console.error('Error generating TTS audio:', error);
-                // Return null to trigger fallback
                 return null;
             }
         }
@@ -4349,7 +4341,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                     }
                 };
 
-                // Use streaming endpoint (NDJSON: one JSON object per line; no alt=sse to avoid SSE framing)
+                // Use streaming endpoint
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?key=${this.apiKey}`;
                 
                 return fetch(url, {
@@ -4396,14 +4388,9 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                             
                             const trimmedLine = line.trim();
                             if (!trimmedLine) continue;
-                            // SSE format: "data: {...}" or "data: [DONE]" ; NDJSON: raw {...}
-                            let jsonStr = trimmedLine;
-                            if (jsonStr.startsWith('data:')) {
-                                jsonStr = jsonStr.slice(5).trim();
-                                if (jsonStr === '[DONE]' || jsonStr === '') continue;
-                            }
+                            
                             try {
-                                const json = JSON.parse(jsonStr);
+                                const json = JSON.parse(trimmedLine);
                                 
                                 // Handle streaming candidates
                                 if (json.candidates && json.candidates[0]) {
@@ -4442,13 +4429,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                     // Process any remaining buffer (last line without newline)
                     if (buffer.trim()) {
                         try {
-                            let rest = buffer.trim();
-                            if (rest.startsWith('data:')) {
-                                rest = rest.slice(5).trim();
-                                if (rest === '[DONE]' || rest === '') rest = null;
-                            }
-                            if (!rest) { /* skip */ } else {
-                            const json = JSON.parse(rest);
+                            const json = JSON.parse(buffer.trim());
                             if (json.candidates && json.candidates[0]) {
                                 const candidate = json.candidates[0];
                                 if (candidate.content && candidate.content.parts) {
@@ -4464,7 +4445,6 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                             if (json.error) {
                                 throw new Error(json.error.message || 'API error');
                             }
-                            }
                         } catch (e) {
                             if (e.message && e.message.includes('API error')) {
                                 throw e;
@@ -4474,13 +4454,10 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                         }
                     }
 
-                    // Finalize - if we got data but no text, might be wrong stream format (e.g. trailing ]); trigger fallback
+                    // Finalize - only throw error if we received data but no text
                     if (hasReceivedData && !fullText) {
-                        const buf = buffer.trim();
-                        const isTrailingOnly = /^[\]\s,]*$/.test(buf) || buf.length < 10;
-                        if (!isTrailingOnly) {
-                            console.error('Received data but no text extracted. Buffer:', buffer.substring(0, 500));
-                        }
+                        console.error('Received data but no text extracted. Buffer:', buffer.substring(0, 500));
+                        // Throw error to trigger fallback
                         throw new Error('No response received from API');
                     }
 
@@ -4607,14 +4584,9 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             openModuleModal(stepIndex);
         }
         
-        // Gemini Chatbot with Live Streaming – key from postMessage (window.__GEMINI_API_KEY__) or meta tag
-        function getGeminiApiKey() {
-            const fromWindow = typeof window.__GEMINI_API_KEY__ === 'string' ? window.__GEMINI_API_KEY__.trim() : '';
-            if (fromWindow) return fromWindow;
-            const meta = document.querySelector('meta[name="gemini-api-key"]');
-            const fromMeta = meta ? (meta.getAttribute('content') || '').trim() : '';
-            return fromMeta;
-        }
+        // Gemini Chatbot with Live Streaming
+        const geminiApiKeyMeta = document.querySelector('meta[name="gemini-api-key"]');
+        const GEMINI_API_KEY = geminiApiKeyMeta ? geminiApiKeyMeta.getAttribute('content') : '';
         const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
 
         const chatbotButton = document.getElementById('chatbot-button');
@@ -4662,7 +4634,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             chatbotPanel.classList.toggle('open');
             
             // Auto-connect when panel opens (if not already connected)
-            if (chatbotPanel.classList.contains('open') && !liveClient && getGeminiApiKey()) {
+            if (chatbotPanel.classList.contains('open') && !liveClient && GEMINI_API_KEY) {
                 await connectLiveChat();
             }
         });
@@ -4673,9 +4645,8 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
 
         // Connect to live streaming
         async function connectLiveChat() {
-            const apiKey = getGeminiApiKey();
-            if (!apiKey) {
-                addMessage('Please set your Gemini API key (meta tag or pass via postMessage from the host app).', false);
+            if (!GEMINI_API_KEY) {
+                addMessage('Please set your Gemini API key in the meta tag.', false);
                 return;
             }
 
@@ -4686,7 +4657,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             updateChatbotStatus('connecting', 'Connecting...');
 
             try {
-                liveClient = new GeminiLiveClient({ apiKey: apiKey });
+                liveClient = new GeminiLiveClient({ apiKey: GEMINI_API_KEY });
                 
                 // Setup streaming handlers
                 liveClient.onDelta((delta) => {
@@ -4799,8 +4770,6 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                 console.log('No message, returning early');
                 return;
             }
-            // Resolve key once for entire function (fallback block uses this)
-            const apiKey = getGeminiApiKey();
             
             // Clear input after getting the message
             chatbotInput.value = '';
@@ -4832,11 +4801,6 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             // Use contextMessage for API calls
             const messageToSend = contextMessage;
 
-            // If we have key but no live client, try connecting once (e.g. key arrived via postMessage after load)
-            if (!liveClient && getGeminiApiKey()) {
-                await connectLiveChat();
-            }
-
             // Try live streaming first
             if (liveClient && liveClient.isConnected) {
                 try {
@@ -4864,8 +4828,8 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             }
 
             // Fallback to standard API (or use if live client not available)
-            if (!apiKey) {
-                addMessage('Please set your Gemini API key (in host app env VITE_GEMINI_API_KEY or meta tag).', false);
+            if (!GEMINI_API_KEY) {
+                addMessage('Please set your Gemini API key.', false);
                 chatbotSend.disabled = false;
                 return;
             }
@@ -4880,7 +4844,7 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
 
             try {
-                const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+                const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: conversationHistory })
@@ -4895,7 +4859,6 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
                     const botResponse = data.candidates[0].content.parts[0].text;
                     addMessage(botResponse, false);
                     conversationHistory.push({ role: 'model', parts: [{ text: botResponse }] });
-                    updateChatbotStatus('offline', 'Ready');
                 } else {
                     addMessage('Sorry, I encountered an error. Please try again.', false);
                 }
@@ -4949,16 +4912,6 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
         // Initialize status
         updateChatbotStatus('offline', 'Offline');
 
-        // When host injects key via postMessage, update status and auto-connect if panel is open
-        window.addEventListener('gemini-api-key-set', function () {
-            if (getGeminiApiKey()) {
-                updateChatbotStatus('offline', 'Ready');
-                if (chatbotPanel && chatbotPanel.classList.contains('open') && !liveClient) {
-                    connectLiveChat();
-                }
-            }
-        });
-
         // Text Selection - Ask Gemini Feature (popup only when user selects text on the question)
         const askGeminiTooltip = document.createElement('div');
         askGeminiTooltip.className = 'ask-gemini-tooltip';
@@ -4980,16 +4933,31 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             // Store text in data attribute so it persists even if selectedText gets cleared
             askGeminiTooltip.setAttribute('data-selected-text', text);
             askGeminiTooltip.style.display = 'flex';
-            askGeminiTooltip.style.left = `${x}px`;
-            askGeminiTooltip.style.top = `${y - 50}px`;
             
-            // Ensure tooltip stays within viewport
-            const rect = askGeminiTooltip.getBoundingClientRect();
-            if (rect.left < 10) {
-                askGeminiTooltip.style.left = '10px';
-            } else if (rect.right > window.innerWidth - 10) {
-                askGeminiTooltip.style.left = `${window.innerWidth - rect.width - 10}px`;
+            // Set initial position to calculate size
+            askGeminiTooltip.style.left = '-1000px'; 
+            askGeminiTooltip.style.top = '-1000px';
+            
+            const tooltipRect = askGeminiTooltip.getBoundingClientRect();
+            const halfWidth = tooltipRect.width / 2;
+            
+            let finalX = x - halfWidth;
+            let finalY = y - tooltipRect.height - 12; // 12px above selection
+            
+            // Ensure tooltip stays within viewport horizontally
+            if (finalX < 10) {
+                finalX = 10;
+            } else if (finalX + tooltipRect.width > window.innerWidth - 10) {
+                finalX = window.innerWidth - tooltipRect.width - 10;
             }
+            
+            // Ensure tooltip stays within viewport vertically
+            if (finalY < 10) {
+                finalY = y + 20; // Show below selection if not enough space above
+            }
+            
+            askGeminiTooltip.style.left = `${finalX}px`;
+            askGeminiTooltip.style.top = `${finalY}px`;
         }
 
         function hideAskGeminiTooltip() {
@@ -5003,13 +4971,17 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             const selection = window.getSelection();
             const text = selection.toString().trim();
 
-            if (text.length > 0) {
+            if (text.length > 0 && selection.rangeCount > 0) {
                 const range = selection.getRangeAt(0);
-                const rect = range.getBoundingClientRect();
-                const x = rect.left + rect.width / 2;
-                const y = rect.top + window.scrollY;
+                const clientRects = range.getClientRects();
+                if (clientRects.length > 0) {
+                    // Use the first rect to position at the top of the selection
+                    const firstRect = clientRects[0];
+                    const x = firstRect.left + firstRect.width / 2;
+                    const y = firstRect.top;
 
-                showAskGeminiTooltip(x, y, text);
+                    showAskGeminiTooltip(x, y, text);
+                }
             } else {
                 hideAskGeminiTooltip();
             }
@@ -5060,6 +5032,11 @@ The SVG should contain ONLY the diagram illustration showing the problem setup, 
             
             // Open chatbot panel
             chatbotPanel.classList.add('open');
+            
+            // Connect if not already connected
+            if (!liveClient && GEMINI_API_KEY) {
+                await connectLiveChat();
+            }
             
             // Wait a tiny bit for panel to open
             await new Promise(resolve => setTimeout(resolve, 50));

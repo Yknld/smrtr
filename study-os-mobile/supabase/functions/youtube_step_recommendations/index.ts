@@ -81,7 +81,7 @@ serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const topic = typeof body.topic === "string" ? body.topic.trim() : "";
     const contentContext = typeof body.contentContext === "string" ? body.contentContext.trim() : "";
-    const count = typeof body.count === "number" && body.count > 0 ? Math.min(body.count, 10) : 5;
+    const count = typeof body.count === "number" && body.count > 0 ? Math.min(body.count, 10) : 3;
     const preferredDurationMin = Array.isArray(body.preferredDurationMin) && body.preferredDurationMin.length >= 2
       ? body.preferredDurationMin
       : [3, 25];

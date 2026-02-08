@@ -110,6 +110,7 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
   const [qaHistory, setQaHistory] = useState<Array<{question: string; answer: string}>>([]);
   const [isLoadingAnswer, setIsLoadingAnswer] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState<string>('');
+  const [lessonQaConversationId, setLessonQaConversationId] = useState<string | null>(null);
 
   // Refs for intervals
   const notesGenerationIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -593,16 +594,35 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
     setIsLoadingAnswer(true);
 
     try {
-      // TODO: Call AI Q&A edge function
-      // For now, show a coming soon message
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const mockAnswer = "AI Q&A will be available soon. I'll answer questions based on your transcript and lesson content.";
-      
-      setQaHistory(prev => [...prev, { question, answer: mockAnswer }]);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        Alert.alert('Sign in required', 'Please sign in to use Q&A.');
+        return;
+      }
+
+      const { data, error: fnError } = await supabase.functions.invoke('tutor_chat', {
+        body: {
+          conversationId: lessonQaConversationId,
+          lessonId,
+          message: question,
+          liveTranscript: transcript.trim() || undefined,
+        },
+      });
+
+      if (fnError) {
+        const msg = (fnError as any)?.context?.body ?? (fnError as any)?.message ?? 'Failed to get answer';
+        throw new Error(typeof msg === 'string' ? msg : 'Failed to get answer');
+      }
+
+      if (data?.conversationId && !lessonQaConversationId) {
+        setLessonQaConversationId(data.conversationId);
+      }
+
+      const answer = data?.assistantMessage ?? 'No response received';
+      setQaHistory(prev => [...prev, { question, answer }]);
     } catch (error: any) {
       console.error('Q&A error:', error);
-      Alert.alert('Error', 'Failed to get answer. Please try again.');
+      Alert.alert('Error', error?.message ?? 'Failed to get answer. Please try again.');
     } finally {
       setIsLoadingAnswer(false);
       setCurrentQuestion('');

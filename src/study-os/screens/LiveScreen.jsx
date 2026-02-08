@@ -27,6 +27,7 @@ export default function LiveScreen() {
   const lessonTitle = location.state?.lessonTitle || 'Lesson'
 
   const [transcriptExpanded, setTranscriptExpanded] = useState(true)
+  const [qaExpanded, setQaExpanded] = useState(true)
   const [askInput, setAskInput] = useState('')
   const [recording, setRecording] = useState(false)
   const [status, setStatus] = useState('')
@@ -34,6 +35,9 @@ export default function LiveScreen() {
   const [transcriptText, setTranscriptText] = useState('')
   const [partialText, setPartialText] = useState('')
   const [notesText, setNotesText] = useState('')
+  const [qaHistory, setQaHistory] = useState([])
+  const [isLoadingAnswer, setIsLoadingAnswer] = useState(false)
+  const [lessonQaConversationId, setLessonQaConversationId] = useState(null)
 
   const assemblyRef = useRef(null)
   const studySessionIdRef = useRef(null)
@@ -183,13 +187,51 @@ export default function LiveScreen() {
     else startRecording()
   }
 
-  const handleSendAsk = () => {
+  const displayTranscript = transcriptText + (partialText ? ` ${partialText}` : '')
+  const hasEnoughContent = (displayTranscript || '').trim().length >= 10
+
+  const handleSendAsk = async () => {
     if (!askInput.trim()) return
-    // TODO: call tutor_chat Edge Function with lessonId + transcript/notes context
+    if (!hasEnoughContent) {
+      setError('Record some content first before asking questions.')
+      return
+    }
+    const question = askInput.trim()
     setAskInput('')
+    setQaExpanded(true)
+    setIsLoadingAnswer(true)
+    setError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setError('Sign in required to use Q&A.')
+        return
+      }
+      const { data, error: fnError } = await supabase.functions.invoke('tutor_chat', {
+        body: {
+          conversationId: lessonQaConversationId,
+          lessonId: lessonId || null,
+          message: question,
+          liveTranscript: displayTranscript.trim() || undefined,
+        },
+      })
+      if (fnError) {
+        const msg = fnError.context?.body ?? fnError.message ?? 'Failed to get answer'
+        setError(typeof msg === 'string' ? msg : 'Failed to get answer')
+        return
+      }
+      if (data?.conversationId && !lessonQaConversationId) {
+        setLessonQaConversationId(data.conversationId)
+      }
+      const answer = data?.assistantMessage ?? 'No response received'
+      setQaHistory((prev) => [...prev, { question, answer }])
+    } catch (err) {
+      setError(err?.message ?? 'Failed to get answer')
+    } finally {
+      setIsLoadingAnswer(false)
+    }
   }
 
-  const displayTranscript = transcriptText + (partialText ? ` ${partialText}` : '')
   const sourceCount = transcriptText ? 1 : 0
 
   return (
@@ -276,6 +318,41 @@ export default function LiveScreen() {
               )}
             </div>
           </section>
+
+          {(qaHistory.length > 0 || isLoadingAnswer) && (
+            <section className="so-live-card">
+              <div className="so-live-card-header">
+                <span className="so-live-card-icon" aria-hidden>
+                  <Icon name="chat" size={20} />
+                </span>
+                <h2 className="so-live-card-title">Q&A</h2>
+                {qaHistory.length > 0 && (
+                  <span className="so-live-qa-badge" aria-hidden>{qaHistory.length}</span>
+                )}
+                <button
+                  type="button"
+                  className="so-live-card-expand"
+                  onClick={() => setQaExpanded((e) => !e)}
+                  aria-label={qaExpanded ? 'Collapse' : 'Expand'}
+                >
+                  <Icon name="chevronUp" size={20} className={qaExpanded ? '' : 'so-live-chevron-down'} />
+                </button>
+              </div>
+              {qaExpanded && (
+                <div className="so-live-card-body">
+                  {qaHistory.map((item, i) => (
+                    <div key={i} className="so-live-qa-item">
+                      <p className="so-live-qa-question"><strong>Q:</strong> {item.question}</p>
+                      <p className="so-live-qa-answer"><strong>A:</strong> {item.answer}</p>
+                    </div>
+                  ))}
+                  {isLoadingAnswer && (
+                    <p className="so-live-card-hint">Getting answer…</p>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </div>
 

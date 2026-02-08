@@ -113,6 +113,7 @@ export const VideoPlayerScreen: React.FC<VideoPlayerScreenProps> = ({
               onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
               onError={handleError}
               shouldPlay={false}
+              shouldCorrectPitch={true}
             />
           )}
         </View>

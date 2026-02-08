@@ -19,7 +19,7 @@
         "NSMicrophoneUsageDescription": "We use the microphone to transcribe your speech in real time for study notes.",
         "NSSpeechRecognitionUsageDescription": "We use speech recognition to provide accurate transcription for your study materials."
       },
-      "buildNumber": "8"
+      "buildNumber": "9"
     },
     "android": {
       "package": "com.studyos.mobile",

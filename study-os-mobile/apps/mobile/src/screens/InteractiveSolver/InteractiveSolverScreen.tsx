@@ -10,7 +10,9 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase, SUPABASE_URL, SOLVER_VIEWER_URL } from '../../config/supabase';
+import { Asset } from 'expo-asset';
+import * as FileSystem from 'expo-file-system';
+import { supabase, SUPABASE_URL } from '../../config/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../ui/tokens';
 import { bundledSolverCss } from './solverStyles';
@@ -41,6 +43,8 @@ export const InteractiveSolverScreen: React.FC<InteractiveSolverScreenProps> = (
 }) => {
   const { lessonId, lessonTitle } = route.params;
   const insets = useSafeAreaInsets();
+  // Native header approximate height to offset HTML content
+  const headerHeight = 60 + insets.top;
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +62,7 @@ export const InteractiveSolverScreen: React.FC<InteractiveSolverScreenProps> = (
         const y = data.y;
         if (Math.abs(y - lastScrollY.current) < 5) return;
         lastScrollY.current = y;
-        const headerHeight = 52 + insets.top;
+        const headerHeight = 60 + insets.top;
         Animated.timing(headerTranslate, {
           toValue: y > HEADER_HIDE_THRESHOLD ? -headerHeight : 0,
           duration: 200,
@@ -106,78 +110,140 @@ true;
     return () => { cancelled = true; };
   }, []);
 
-  const viewerUrl = SOLVER_VIEWER_URL?.trim();
-  const hasViewer = !!viewerUrl;
-  const uri = hasViewer && token
-    ? `${viewerUrl}${viewerUrl.includes('?') ? '&' : '?'}lesson_id=${encodeURIComponent(lessonId)}`
-    : null;
+  const viewerUrl = null;
+  const hasViewer = true; // Always true as we bundle the solver
+  const uri = 'bundled'; // Dummy URI to trigger effect
 
   // Base URL for solver (folder so relative assets like homework-app.js resolve correctly)
-  const solverBaseUrl = viewerUrl ? viewerUrl.replace(/\/[^/]*$/, '/') : '';
+  const solverBaseUrl = SUPABASE_URL;
 
-  const injectToken = token && uri
+  const injectToken = token
     ? `(function(){ window.__SUPABASE_TOKEN__ = ${JSON.stringify(token)}; window.__SUPABASE_URL__ = ${JSON.stringify(SUPABASE_URL)}; window.__LESSON_ID__ = ${JSON.stringify(lessonId)}; })(); true;`
     : '';
 
-  // Fetch HTML, CSS, and homework-app.js; inline CSS and JS so WebView doesn't rely on baseUrl for relative resources (fixes "Failed to load viewer" on mobile)
+  // Get Gemini API key from env (EXPO_PUBLIC_ prefix is standard for Expo)
+  const geminiApiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+
+  // Fetch HTML, CSS, and homework-app.js from bundled assets
   useEffect(() => {
-    if (!uri || !token || htmlContent !== null || htmlError !== null) return;
-    const baseUrl = solverBaseUrl || '';
+    if (!token || htmlContent !== null || htmlError !== null) return;
     let cancelled = false;
     (async () => {
       try {
-        const [htmlRes, cssRes, appJsRes] = await Promise.all([
-          fetch(uri),
-          baseUrl ? fetch(baseUrl + 'homework-styles.css') : Promise.resolve(null),
-          baseUrl ? fetch(baseUrl + 'homework-app.js') : Promise.resolve(null),
+        const loadAsset = async (module: any) => {
+          const asset = Asset.fromModule(module);
+          await asset.downloadAsync();
+          return await FileSystem.readAsStringAsync(asset.localUri || asset.uri);
+        };
+
+        const [htmlText, cssText, jsText] = await Promise.all([
+          loadAsset(require('../../assets/solver/solver.html.txt')),
+          loadAsset(require('../../assets/solver/homework-styles.css.txt')),
+          loadAsset(require('../../assets/solver/homework-app.js.txt')),
         ]);
+
         if (cancelled) return;
-        if (!htmlRes.ok) {
-          setHtmlError(`Failed to load solver: ${htmlRes.status}`);
-          return;
-        }
-        let text = await htmlRes.text();
-        if (cancelled) return;
-        let cssText =
-          cssRes && cssRes.ok
-            ? await cssRes.text()
-            : '';
-        if (cancelled) return;
-        if (!cssText) cssText = bundledSolverCss;
-        let inlined = text.replace(
-          /<link\s+rel="stylesheet"\s+href="homework-styles\.css"\s*\/?>/i,
+
+        let inlined = htmlText.replace(
+          /<link\s+rel="stylesheet"\s+href="homework-styles\.css[^"]*"\s*\/?>/i,
           `<style>${cssText.replace(/<\/style>/gi, '')}</style>`,
         );
-        // Inline homework-app.js so the WebView doesn't fail to load the relative script (iOS/Android baseUrl behavior)
-        const appJs =
-          appJsRes && appJsRes.ok
-            ? await appJsRes.text()
-            : null;
-        if (cancelled) return;
-        if (appJs) {
-          const escapedAppJs = appJs.replace(/<\/script>/gi, '<\\/script>');
+        
+        // Inline homework-app.js
+        if (jsText) {
+          const escapedAppJs = jsText.replace(/<\/script>/gi, '<\\/script>');
           inlined = inlined.replace(
             /<script\s+src="homework-app\.js[^"]*"\s*><\/script>/i,
             `<script>${escapedAppJs}</script>`,
           );
         }
         const injectScript = `<script>(function(){window.__SUPABASE_TOKEN__=${JSON.stringify(token)};window.__SUPABASE_URL__=${JSON.stringify(SUPABASE_URL)};window.__LESSON_ID__=${JSON.stringify(lessonId)};})();<\/script>`;
-        inlined = inlined.replace(/<head\s*>/i, '<head>' + injectScript);
+        // Inject top padding to avoid overlap with native header
+        // Use a larger offset (header height + 20px buffer)
+        // Also add mobile-specific layout overrides to move nav to bottom and fix chatbot overlap
+        const styleInjection = `<style>
+          body { padding-top: ${headerHeight + 20}px !important; padding-bottom: 80px !important; }
+          .question-nav { 
+            border-bottom: none !important; 
+            margin-bottom: 0 !important; 
+            padding-bottom: 0 !important;
+          }
+          .question-nav-buttons {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            background: var(--bg-primary) !important;
+            padding: 16px !important;
+            border-top: 1px solid var(--border) !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            z-index: 1000 !important;
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+          }
+          .question-nav-btn {
+            flex: 1 !important;
+            padding: 12px !important;
+            font-size: 16px !important;
+            margin: 0 4px !important;
+          }
+          .question-nav-info {
+            justify-content: center !important;
+            width: 100% !important;
+            margin-bottom: 10px !important;
+          }
+          /* Fix Chatbot for Mobile */
+          .chatbot-container {
+            bottom: 90px !important; /* Above nav bar */
+            right: 16px !important;
+            z-index: 2000 !important;
+          }
+          .chatbot-panel {
+            position: fixed !important;
+            bottom: 90px !important;
+            right: 16px !important;
+            left: 16px !important;
+            width: auto !important;
+            height: auto !important;
+            max-height: 50vh !important;
+            border-radius: 12px !important;
+            display: none; /* Hidden by default, toggled by JS */
+            flex-direction: column !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2) !important;
+          }
+          .chatbot-panel.open {
+            display: flex !important;
+          }
+          .chatbot-messages {
+            max-height: 250px !important;
+            flex: 1 !important;
+          }
+        </style>`;
+        
+        inlined = inlined.replace(/<head\s*>/i, '<head>' + injectScript + styleInjection);
+        // Inject Gemini API Key into meta tag
+        if (geminiApiKey) {
+          inlined = inlined.replace(
+            /<meta\s+name="gemini-api-key"\s+content="[^"]*"/i,
+            `<meta name="gemini-api-key" content="${geminiApiKey}"`
+          );
+        }
         setHtmlContent(inlined);
       } catch (e) {
-        if (!cancelled) setHtmlError('Failed to load solver');
+        console.error('Failed to load bundled solver:', e);
+        if (!cancelled) setHtmlError('Failed to load solver assets');
       }
     })();
     return () => { cancelled = true; };
-  }, [uri, token, solverBaseUrl, htmlContent, htmlError]);
+  }, [token, htmlContent, htmlError, headerHeight, geminiApiKey]);
 
   // Load WebView only when we need it (avoids crash at startup if native module not linked)
   useEffect(() => {
-    if (hasViewer && uri && token && !WebViewComponent) {
+    if (hasViewer && token && !WebViewComponent) {
       const W = getWebView();
       setWebViewComponent(W);
     }
-  }, [hasViewer, uri, token, WebViewComponent]);
+  }, [hasViewer, token, WebViewComponent]);
 
   if (loading) {
     return (
@@ -228,7 +294,7 @@ true;
   }
 
   // Native WebView module not linked — show message and ask for rebuild
-  if (hasViewer && uri && token && !WebViewComponent) {
+  if (hasViewer && token && !WebViewComponent) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
@@ -276,7 +342,7 @@ true;
   }
 
   // Load as HTML with baseUrl so it always renders (avoids wrong Content-Type from storage)
-  const baseUrlWithQuery = `${solverBaseUrl}?lesson_id=${encodeURIComponent(lessonId)}`;
+  const baseUrlWithQuery = solverBaseUrl;
 
   return (
     <View style={styles.fullScreen}>
@@ -305,7 +371,7 @@ true;
           style={styles.webview}
           javaScriptEnabled
           domStorageEnabled
-          originWhitelist={['https://*', 'http://*']}
+          originWhitelist={['https://*', 'http://*', 'file://*', 'data:*', 'about:*']}
         />
       </View>
     </View>

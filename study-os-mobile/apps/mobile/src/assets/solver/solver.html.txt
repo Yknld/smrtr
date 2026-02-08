@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- Set by host from GEMINI_API_KEY (env) or at build time; leave empty in repo -->
+    <meta name="gemini-api-key" content="">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;">
+    <title>Interactive Solver</title>
+    <link rel="stylesheet" href="homework-styles.css?v=1739021400">
+    <!-- Load MathJax synchronously so it is ready before homework-app.js runs (fixes formulas not rendering in production) -->
+    <script>
+        window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']], processEscapes: true }, options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] } };
+    </script>
+    <script id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+        <div class="loading-progress" id="loading-progress">Preparing...</div>
+    </div>
+    <div class="container">
+        <div class="question-nav">
+            <div class="question-nav-info">
+                <div class="question-selector"><label for="question-select">Question:</label><select id="question-select"><option value="0">Question 1</option></select></div>
+                <div class="question-counter" id="question-counter">1 of 1</div>
+            </div>
+            <div class="question-nav-buttons">
+                <button class="question-nav-btn" id="prev-question-btn" onclick="typeof previousQuestion==='function'&&previousQuestion()">← Previous</button>
+                <button class="question-nav-btn" id="next-question-btn" onclick="typeof nextQuestion==='function'&&nextQuestion()">Next →</button>
+            </div>
+        </div>
+        <div class="problem-section" id="problem-section">
+            <div class="problem-content">
+                <h2 id="problem-title">Problem</h2>
+                <div class="problem-text" id="problem-text">Loading...</div>
+                <img id="problem-image" class="problem-image" src="" alt="" style="display: none;">
+            </div>
+            <div class="problem-visualizer" id="problem-visualizer">
+                <div class="problem-visualizer-content" id="problem-visualizer-content"></div>
+            </div>
+        </div>
+        <div class="video-section" style="display: none;">
+            <div class="video-wrapper">
+                <iframe id="youtube-video" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+            </div>
+        </div>
+        <div class="steps-container">
+            <h3>Solution Steps</h3>
+            <div class="steps-list" id="steps-list"></div>
+        </div>
+    </div>
+    <div class="chatbot-container">
+        <div class="chatbot-panel" id="chatbot-panel">
+            <div class="chatbot-header">
+                <div><span>Live Tutor</span><div class="chatbot-status" id="chatbot-status"><span class="status-dot offline" id="status-dot"></span><span id="status-text">Offline</span></div></div>
+                <button class="chatbot-close" id="chatbot-close" aria-label="Close">×</button>
+            </div>
+            <div class="chatbot-messages" id="chatbot-messages"><div class="chatbot-message bot">How can I help with this problem?</div></div>
+            <div class="chatbot-input-container">
+                <textarea class="chatbot-input" id="chatbot-input" placeholder="Ask..." rows="1"></textarea>
+                <button class="chatbot-send" id="chatbot-send">Send</button>
+            </div>
+        </div>
+        <button class="chatbot-button" id="chatbot-button" aria-label="Live Tutor">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+        </button>
+    </div>
+    <div class="resources-modal" id="resources-modal">
+        <div class="resources-modal-content">
+            <div class="resources-modal-header"><h3 id="resources-modal-title">Resources</h3><button class="resources-modal-close" id="resources-modal-close">×</button></div>
+            <div id="resources-modal-body"></div>
+        </div>
+    </div>
+    <div class="module-modal" id="module-modal">
+        <div class="module-modal-content">
+            <div class="module-modal-header"><h3 id="module-modal-title">Module</h3><button class="module-modal-close" id="module-modal-close">×</button></div>
+            <div class="module-modal-body" id="module-modal-body"></div>
+        </div>
+    </div>
+    <script src="homework-app.js?v=1739021400"></script>
+    <script>
+        // How the solver pulls module content:
+        // 1. Auth: __SUPABASE_TOKEN__, __SUPABASE_URL__, __LESSON_ID__ (injected by parent or from URL).
+        // 2. Fetch manifest: GET supabaseUrl/functions/v1/interactive_module_get?lesson_id=UUID with Bearer token.
+        // 3. API returns { manifest } with problem text, steps, and signed URLs for assets (visualization, component, visual, audio).
+        // 4. loadModuleFromApi(manifest) in homework-app.js: for each question, loadQuestionFromManifest fetches each asset URL (resolveAssetUrl returns signed URLs as-is), then loadHomework() fills the DOM and hideLoadingOverlay().
+        // 5. If embedded in iframe (e.g. Study OS), parent can postMessage({ type: 'auth', token, url, lessonId }) so we set globals and call doLoad().
+        window.addEventListener('DOMContentLoaded', async function() {
+            function waitFor(name) {
+                return new Promise(function(resolve, reject) {
+                    var attempts = 0;
+                    function check() {
+                        if (typeof window[name] === 'function') return resolve();
+                        if (++attempts >= 50) return reject(new Error(name + ' not found'));
+                        setTimeout(check, 100);
+                    }
+                    check();
+                });
+            }
+            try { await waitFor('loadModuleFromApi'); } catch (e) {
+                var ol = document.getElementById('loading-overlay'); if (ol) ol.classList.add('hidden');
+                alert('Failed to load viewer.'); return;
+            }
+            var params = new URLSearchParams(window.location.search);
+            var loadStarted = false;
+            function getLessonId() { return (typeof window.__LESSON_ID__ === 'string' && window.__LESSON_ID__) || params.get('lesson_id'); }
+            function getToken() { return window.__SUPABASE_TOKEN__; }
+            function getSupabaseUrl() { return (window.__SUPABASE_URL__ || '').replace(/\/$/, ''); }
+
+            window.addEventListener('message', function(ev) {
+                var d = ev.data;
+                if (d && d.type === 'auth' && d.token && d.url) {
+                    window.__SUPABASE_TOKEN__ = d.token;
+                    window.__SUPABASE_URL__ = (d.url || '').replace(/\/$/, '');
+                    if (d.lessonId) window.__LESSON_ID__ = d.lessonId;
+                    doLoad();
+                }
+            });
+
+            async function doLoad() {
+                if (loadStarted) return;
+                var lessonId = getLessonId();
+                var token = getToken();
+                var supabaseUrl = getSupabaseUrl();
+                if (!lessonId || !token || !supabaseUrl) return;
+                loadStarted = true;
+                try {
+                    var r = await fetch(supabaseUrl + '/functions/v1/interactive_module_get?lesson_id=' + encodeURIComponent(lessonId), { headers: { 'Authorization': 'Bearer ' + token } });
+                    var data;
+                    try { data = await r.json(); } catch (_) { data = {}; }
+                    if (!r.ok) {
+                        var msg = (data && data.error) ? data.error : ('Failed to load module (' + r.status + ')');
+                        var ol = document.getElementById('loading-overlay'); if (ol) ol.classList.add('hidden');
+                        var titleEl = document.getElementById('problem-title');
+                        var textEl = document.getElementById('problem-text');
+                        if (titleEl) titleEl.textContent = 'No module';
+                        if (textEl) {
+                            if (msg.indexOf('No interactive module found') !== -1) {
+                                textEl.innerHTML = 'This lesson doesn\'t have an interactive module yet. Generate one using the TheGeminiLoop pipeline (RunPod) with this lesson ID and push to Supabase, or try another lesson that already has one.';
+                            } else {
+                                textEl.textContent = msg;
+                            }
+                        }
+                        if (msg.indexOf('No interactive module found') === -1) alert(msg);
+                        return;
+                    }
+                    if (data.manifest) {
+                        var result = await window.loadModuleFromApi(data.manifest);
+                        if (!result) {
+                            var ol = document.getElementById('loading-overlay'); if (ol) ol.classList.add('hidden');
+                            var titleEl = document.getElementById('problem-title');
+                            var textEl = document.getElementById('problem-text');
+                            if (titleEl) titleEl.textContent = 'Load failed';
+                            if (textEl) textEl.textContent = 'Failed to load module content. Check the console for errors (e.g. CORS or missing assets).';
+                            return;
+                        }
+                    } else {
+                        var ol = document.getElementById('loading-overlay'); if (ol) ol.classList.add('hidden');
+                        var textEl = document.getElementById('problem-text');
+                        if (textEl) textEl.textContent = 'No manifest in response.';
+                        alert('No manifest');
+                        return;
+                    }
+                } catch (err) {
+                    var ol = document.getElementById('loading-overlay'); if (ol) ol.classList.add('hidden');
+                    var textEl = document.getElementById('problem-text');
+                    var msg = err.message || 'Failed to load interactive module.';
+                    if (textEl) textEl.textContent = msg;
+                    alert(msg);
+                    return;
+                }
+                var ol = document.getElementById('loading-overlay'); if (ol) ol.classList.add('hidden');
+            }
+
+            if (getLessonId() && getToken() && getSupabaseUrl()) {
+                await doLoad();
+                return;
+            }
+            var moduleId = params.get('module');
+            if (moduleId && typeof window.loadHomeworkFromModule === 'function') {
+                loadStarted = true;
+                try {
+                    await window.loadHomeworkFromModule(moduleId);
+                } catch (err) {
+                    var ol = document.getElementById('loading-overlay'); if (ol) ol.classList.add('hidden');
+                    alert(err.message || 'Failed to load module.'); return;
+                }
+                var ol = document.getElementById('loading-overlay'); if (ol) ol.classList.add('hidden');
+                return;
+            }
+            if (window !== window.top) {
+                var progressEl = document.getElementById('loading-progress');
+                if (progressEl) progressEl.textContent = 'Waiting for auth…';
+                setTimeout(function() {
+                    if (loadStarted) return;
+                    var ol = document.getElementById('loading-overlay'); if (ol) ol.classList.add('hidden');
+                    var textEl = document.getElementById('problem-text');
+                    if (textEl) textEl.textContent = 'No auth received. Open this lesson from the app.';
+                }, 5000);
+            } else {
+                var ol = document.getElementById('loading-overlay'); if (ol) ol.classList.add('hidden');
+                alert('Add ?lesson_id=UUID (with token) or ?module=MODULE_ID');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -78,7 +78,7 @@
                     return;
                 }
                 let attempts = 0;
-                const maxAttempts = 100;
+                const maxAttempts = 200;
                 const check = () => {
                     if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
                         resolve();
@@ -1959,9 +1959,14 @@ CRITICAL JSON FORMATTING REQUIREMENTS:
                 }
             });
 
-            // Typeset all math in problem + steps (MathJax script loads async; this runs when ready)
+            // Typeset all math in problem + steps
             const problemSection = document.getElementById('problem-section');
-            if (problemSection && stepsList) typesetMath([problemSection, stepsList]);
+            if (problemSection && stepsList) {
+                typesetMath([problemSection, stepsList]);
+                // Retry after 2s and 4s (production CDN can be slower; ensures formulas render)
+                setTimeout(() => typesetMath([problemSection, stepsList]), 2000);
+                setTimeout(() => typesetMath([problemSection, stepsList]), 4000);
+            }
 
             // Initialize step state tracking
             initializeStepStates(steps.length);

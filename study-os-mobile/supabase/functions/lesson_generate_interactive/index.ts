@@ -2,7 +2,7 @@
 // Edge Function: lesson_generate_interactive
 // ============================================================================
 //
-// Purpose: Enqueue interactive module generation (RunPod/GeminiLoop). Uses
+// Purpose: Enqueue interactive module generation (RunPod/TheGeminiLoop). Uses
 //          same lesson content order as video: summary → notes → transcript → title.
 //
 // Request:

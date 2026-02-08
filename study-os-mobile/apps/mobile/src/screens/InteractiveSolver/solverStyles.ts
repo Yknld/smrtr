@@ -1,4 +1,4 @@
-/** Bundled from GeminiLoop/homework-styles.css - regenerate with: node scripts/embed-solver-css.cjs */
+/** Bundled from TheGeminiLoop/homework-styles.css - regenerate with: node scripts/embed-solver-css.cjs */
 export const bundledSolverCss = `/* ==================== RESET & BASE STYLES ==================== */
 * {
     margin: 0;

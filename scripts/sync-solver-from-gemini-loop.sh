@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Copy solver assets from GeminiLoop into smrtr/solver/ so web and mobile
-# use the same code as the canonical GeminiLoop implementation.
+# Copy solver assets from TheGeminiLoop into smrtr/solver/ so web and mobile
+# use the same code as the canonical TheGeminiLoop implementation.
 # Run from smrtr repo root: ./scripts/sync-solver-from-gemini-loop.sh
 
 set -e
-GEMINI_LOOP_DIR="${GEMINI_LOOP_DIR:-../GeminiLoop}"
+GEMINI_LOOP_DIR="${GEMINI_LOOP_DIR:-../TheGeminiLoop}"
 SRC="$GEMINI_LOOP_DIR"
 DEST="solver"
 
 if [[ ! -d "$SRC" ]]; then
-  echo "GeminiLoop not found at $SRC. Set GEMINI_LOOP_DIR or run from smrtr with GeminiLoop as sibling."
+  echo "TheGeminiLoop not found at $SRC. Set GEMINI_LOOP_DIR or run from smrtr with TheGeminiLoop as sibling."
   exit 1
 fi
 

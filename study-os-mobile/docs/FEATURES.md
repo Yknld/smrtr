@@ -76,7 +76,7 @@ flowchart TB
     A["Tap Interact"] --> B{"interactive_pages ready?"}
     B -->|No| C["Show modal: photo or generate from lesson"]
     C --> D["interactive_extract_questions_from_image or lesson_generate_interactive"]
-    D --> E["RunPod / GeminiLoop"]
+    D --> E["RunPod / TheGeminiLoop"]
     E --> F["Module pushed to Supabase, status=ready"]
     B -->|Yes| G["Navigate to InteractiveSolver"]
     F --> G

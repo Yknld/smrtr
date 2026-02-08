@@ -1,6 +1,6 @@
 # lesson_generate_interactive
 
-Enqueues interactive module generation (GeminiLoop/RunPod). Uses the same lesson content order as video generation: **summary** → **notes/transcript** (from `sourceHash`) → **lesson title**.
+Enqueues interactive module generation (TheGeminiLoop/RunPod). Uses the same lesson content order as video generation: **summary** → **notes/transcript** (from `sourceHash`) → **lesson title**.
 
 ## Deploy
 
@@ -38,7 +38,7 @@ Then set secrets in Supabase Dashboard → Edge Functions → lesson_generate_in
 
 ## How the builder gets “what questions to generate”
 
-The Edge Function sends **problem_texts** to RunPod. They come from either the user's image or from lesson context. RunPod/GeminiLoop uses each string as one “problem” to generate steps and components for.
+The Edge Function sends **problem_texts** to RunPod. They come from either the user's image or from lesson context. RunPod/TheGeminiLoop uses each string as one “problem” to generate steps and components for.
 
 **When the client sends problem_texts:** Use them as-is (e.g. from `interactive_extract_questions_from_image`). No lesson context.
 
@@ -69,7 +69,7 @@ The Edge Function sends **problem_texts** to RunPod. They come from either the u
 }
 ```
 
-GeminiLoop’s RunPod handler receives `problem_texts` and runs `generate.py` with those strings as the problem descriptions; it generates the interactive module (steps, components, etc.) and pushes to Supabase.
+TheGeminiLoop’s RunPod handler receives `problem_texts` and runs `generate.py` with those strings as the problem descriptions; it generates the interactive module (steps, components, etc.) and pushes to Supabase.
 
 ## Flow
 

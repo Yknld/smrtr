@@ -2,18 +2,18 @@
 
 The interactive homework page is **solver.html** (not index.html). It’s loaded from two places.
 
-## Keeping solver code up to date (source: GeminiLoop)
+## Keeping solver code up to date (source: TheGeminiLoop)
 
-The **canonical implementation** of the interactive solver is in **GeminiLoop** (same repo or sibling): `homework-app.js`, `homework-styles.css`, `solver.html`, and the logic that loads manifest + components. The **web and mobile app** use a **copy** in `smrtr/solver/`. To keep behavior in sync (e.g. image handling, manifest format, iframe loading):
+The **canonical implementation** of the interactive solver is in **TheGeminiLoop** (same repo or sibling): `homework-app.js`, `homework-styles.css`, `solver.html`, and the logic that loads manifest + components. The **web and mobile app** use a **copy** in `smrtr/solver/`. To keep behavior in sync (e.g. image handling, manifest format, iframe loading):
 
-1. **Copy from GeminiLoop into smrtr/solver/**  
-   From the repo root (with both GeminiLoop and smrtr available):
+1. **Copy from TheGeminiLoop into smrtr/solver/**  
+   From the repo root (with both TheGeminiLoop and smrtr available):
    ```bash
-   cp GeminiLoop/homework-app.js    smrtr/solver/
-   cp GeminiLoop/homework-styles.css smrtr/solver/
-   cp GeminiLoop/solver.html        smrtr/solver/
+   cp TheGeminiLoop/homework-app.js    smrtr/solver/
+   cp TheGeminiLoop/homework-styles.css smrtr/solver/
+   cp TheGeminiLoop/solver.html        smrtr/solver/
    ```
-   Or run the sync script if present: `./scripts/sync-solver-from-gemini-loop.sh` (from smrtr).
+   Or run the sync script if present: `./scripts/sync-solver-from-gemini-loop.sh` (from smrtr; expects TheGeminiLoop as sibling).
 
 2. **Bump cache**  
    In `solver/solver.html`, update the `?v=` query on the script and stylesheet (e.g. `?v=1769600000` → new timestamp).

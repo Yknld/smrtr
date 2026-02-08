@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // Purpose: Return YouTube videos relevant to a single homework step.
-// Used by GeminiLoop "Feeling stuck?" button. Uses Gemini to generate
+// Used by TheGeminiLoop "Feeling stuck?" button. Uses Gemini to generate
 // search queries from the step context, then YouTube Data API to fetch
 // and optionally Gemini to rank results.
 //

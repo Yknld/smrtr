@@ -1,6 +1,6 @@
 # youtube_step_recommendations
 
-Returns YouTube videos relevant to a **single homework step**. Used by GeminiLoop’s “Feeling stuck?” button.
+Returns YouTube videos relevant to a **single homework step**. Used by TheGeminiLoop’s “Feeling stuck?” button.
 
 ## Flow
 
@@ -54,4 +54,4 @@ supabase functions deploy youtube_step_recommendations
 supabase secrets set GEMINI_API_KEY=xxx YOUTUBE_API_KEY=yyy
 ```
 
-No auth required beyond the anon key (GeminiLoop uses it without user login).
+No auth required beyond the anon key (TheGeminiLoop uses it without user login).

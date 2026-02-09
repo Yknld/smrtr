@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   StatusBar,
   TouchableOpacity,
+  TextInput,
   ActivityIndicator,
   Modal,
   Pressable,
@@ -14,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../ui/tokens';
 import { supabase } from '../../config/supabase';
+import { notesService } from '../../services/notes';
 import { SUPPORTED_LANGUAGES, Language } from '../../components/LanguageSelector/LanguageSelector';
 
 interface NotesViewScreenProps {
@@ -32,9 +34,40 @@ export const NotesViewScreen: React.FC<NotesViewScreenProps> = ({ route, navigat
   const [loading, setLoading] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notesRef = useRef(notes);
+
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
 
   useEffect(() => {
     loadNotes();
+  }, [lessonId]);
+
+  useEffect(() => {
+    return () => {
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = null;
+      }
+      const latest = notesRef.current;
+      if (typeof latest === 'string') {
+        notesService.updateNotes(lessonId, latest).catch(err =>
+          console.error('[NotesView] Flush save on unmount failed:', err)
+        );
+      }
+    };
+  }, [lessonId]);
+
+  const debouncedSave = useCallback((text: string) => {
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      saveDebounceRef.current = null;
+      notesService.updateNotes(lessonId, text).catch(err =>
+        console.error('[NotesView] Save failed:', err)
+      );
+    }, 500);
   }, [lessonId]);
 
   const loadNotes = async () => {
@@ -46,14 +79,14 @@ export const NotesViewScreen: React.FC<NotesViewScreenProps> = ({ route, navigat
         .select('notes_final_text, notes_raw_text')
         .eq('lesson_id', lessonId)
         .eq('type', 'notes')
-        .single();
+        .maybeSingle();
 
       if (error) {
-        if (error.code !== 'PGRST116') {
-          console.error('[NotesView] Error loading notes:', error);
-        }
+        console.error('[NotesView] Error loading notes:', error);
       } else if (data) {
         setNotes(data.notes_final_text || data.notes_raw_text || '');
+      } else {
+        setNotes('');
       }
     } catch (err: any) {
       console.error('[NotesView] Failed to load notes:', err);
@@ -106,24 +139,28 @@ export const NotesViewScreen: React.FC<NotesViewScreenProps> = ({ route, navigat
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
-        ) : notes.trim().length > 0 ? (
+        ) : (
           <ScrollView
             style={styles.content}
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.notesCard}>
-              <Text style={styles.notesText}>{notes}</Text>
+              <TextInput
+                style={styles.notesTextInput}
+                value={notes}
+                onChangeText={(t) => {
+                  setNotes(t);
+                  debouncedSave(t);
+                }}
+                placeholder="Type your notes here. Edits save automatically."
+                placeholderTextColor={colors.textTertiary}
+                multiline
+                textAlignVertical="top"
+              />
             </View>
           </ScrollView>
-        ) : (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="document-text-outline" size={64} color={colors.textTertiary} />
-            <Text style={styles.emptyTitle}>No notes yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Start a transcription to generate notes
-            </Text>
-          </View>
         )}
 
         {/* Language Selector Modal */}
@@ -247,6 +284,14 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: 24,
     letterSpacing: -0.2,
+  },
+  notesTextInput: {
+    fontSize: 15,
+    color: colors.textPrimary,
+    lineHeight: 24,
+    letterSpacing: -0.2,
+    minHeight: 200,
+    padding: 0,
   },
   emptyContainer: {
     flex: 1,

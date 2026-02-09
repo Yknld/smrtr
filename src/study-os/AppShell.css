@@ -10,7 +10,13 @@
 .so-main {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.so-main > * {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }

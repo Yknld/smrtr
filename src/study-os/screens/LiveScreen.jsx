@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { createElement } from 'react'
 import { Icon } from '../components/Icons'
 import { AssemblyLiveService } from '../services/assemblyLive'
 import { supabase } from '../config/supabase'
@@ -15,10 +16,32 @@ import {
   notesCommit,
   notesGet,
   notesFinalize,
+  notesUpdate,
   persistTranscript,
   endStudySession,
 } from '../data/liveTranscription.repository'
 import './screens.css'
+
+/** Render **bold** as <strong> for Q&A answers */
+function formatAnswerText (text) {
+  if (!text || typeof text !== 'string') return text
+  const parts = []
+  const re = /\*\*(.*?)\*\*/g
+  let lastIndex = 0
+  let match
+  let key = 0
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(createElement('span', { key: key++ }, text.slice(lastIndex, match.index)))
+    }
+    parts.push(createElement('strong', { key: key++ }, match[1]))
+    lastIndex = re.lastIndex
+  }
+  if (lastIndex < text.length) {
+    parts.push(createElement('span', { key: key++ }, text.slice(lastIndex)))
+  }
+  return parts.length ? parts : text
+}
 
 export default function LiveScreen() {
   const { lessonId } = useParams()
@@ -44,6 +67,25 @@ export default function LiveScreen() {
   const seqRef = useRef(0)
   const commitIntervalRef = useRef(null)
   const transcriptRef = useRef('')
+  const saveNotesTimeoutRef = useRef(null)
+  const notesTextRef = useRef(notesText)
+
+  useEffect(() => {
+    notesTextRef.current = notesText
+  }, [notesText])
+
+  useEffect(() => {
+    return () => {
+      if (saveNotesTimeoutRef.current) {
+        clearTimeout(saveNotesTimeoutRef.current)
+        saveNotesTimeoutRef.current = null
+      }
+      const latest = notesTextRef.current
+      if (lessonId && typeof latest === 'string') {
+        notesUpdate(lessonId, latest).catch(() => {})
+      }
+    }
+  }, [lessonId])
 
   const loadNotes = useCallback(async () => {
     if (!lessonId) return
@@ -58,6 +100,27 @@ export default function LiveScreen() {
   useEffect(() => {
     if (!recording && lessonId) loadNotes()
   }, [lessonId, recording, loadNotes])
+
+  const saveNotesDebounced = useCallback(
+    (text) => {
+      if (!lessonId) return
+      if (saveNotesTimeoutRef.current) clearTimeout(saveNotesTimeoutRef.current)
+      saveNotesTimeoutRef.current = setTimeout(() => {
+        saveNotesTimeoutRef.current = null
+        notesUpdate(lessonId, text).catch(() => {})
+      }, 500)
+    },
+    [lessonId]
+  )
+
+  const handleNotesChange = useCallback(
+    (e) => {
+      const next = e.target.value
+      setNotesText(next)
+      saveNotesDebounced(next)
+    },
+    [saveNotesDebounced]
+  )
 
   const handleTranscriptEvent = useCallback(
     (event) => {
@@ -188,14 +251,9 @@ export default function LiveScreen() {
   }
 
   const displayTranscript = transcriptText + (partialText ? ` ${partialText}` : '')
-  const hasEnoughContent = (displayTranscript || '').trim().length >= 10
 
   const handleSendAsk = async () => {
     if (!askInput.trim()) return
-    if (!hasEnoughContent) {
-      setError('Record some content first before asking questions.')
-      return
-    }
     const question = askInput.trim()
     setAskInput('')
     setQaExpanded(true)
@@ -212,7 +270,8 @@ export default function LiveScreen() {
           conversationId: lessonQaConversationId,
           lessonId: lessonId || null,
           message: question,
-          liveTranscript: displayTranscript.trim() || undefined,
+          liveTranscript: (displayTranscript && displayTranscript.trim()) ? displayTranscript.trim() : undefined,
+          notes: (notesText && notesText.trim()) ? notesText.trim() : undefined,
         },
       })
       if (fnError) {
@@ -232,10 +291,20 @@ export default function LiveScreen() {
     }
   }
 
-  const sourceCount = transcriptText ? 1 : 0
+  const sourceCount = [transcriptText, notesText].filter(Boolean).length
 
   return (
-    <div className="so-screen">
+    <div
+      className="so-screen so-live-screen"
+      style={{
+        height: '100vh',
+        minHeight: '100vh',
+        maxHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
       <header className="so-live-header">
         <button type="button" className="so-live-back" onClick={() => navigate(-1)} aria-label="Back">
           <Icon name="back" size={24} />
@@ -267,110 +336,193 @@ export default function LiveScreen() {
         </div>
       </header>
 
-      <div className="so-live-content">
-        <div className="so-live-content-inner">
-          <section className="so-live-card">
+      <div
+        className="so-live-content"
+        style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}
+      >
+        <aside className="so-live-sidebar-left">
+          <section className="so-live-card so-live-qa-card">
             <div className="so-live-card-header">
               <span className="so-live-card-icon" aria-hidden>
-                <Icon name="mic" size={20} />
+                <Icon name="chat" size={20} />
               </span>
-              <h2 className="so-live-card-title">LIVE TRANSCRIPT</h2>
+              <h2 className="so-live-card-title">Q&A</h2>
+              {qaHistory.length > 0 && (
+                <span className="so-live-qa-badge" aria-hidden>{qaHistory.length}</span>
+              )}
               <button
                 type="button"
                 className="so-live-card-expand"
-                onClick={() => setTranscriptExpanded((e) => !e)}
-                aria-label={transcriptExpanded ? 'Collapse' : 'Expand'}
+                onClick={() => setQaExpanded((e) => !e)}
+                aria-label={qaExpanded ? 'Collapse' : 'Expand'}
               >
-                <Icon name="chevronUp" size={20} className={transcriptExpanded ? '' : 'so-live-chevron-down'} />
+                <Icon name="chevronUp" size={20} className={qaExpanded ? '' : 'so-live-chevron-down'} />
               </button>
             </div>
-            {transcriptExpanded && (
+            {qaExpanded && (
               <div className="so-live-card-body">
-                {displayTranscript ? (
-                  <p className="so-live-card-text">
-                    {transcriptText}
-                    {partialText && (
-                      <span className="so-live-card-partial" style={{ color: 'var(--so-text-tertiary)', fontStyle: 'italic' }}>
-                        {' '}
-                        {partialText}
-                      </span>
+                {(qaHistory.length > 0 || isLoadingAnswer) ? (
+                  <>
+                    {qaHistory.map((item, i) => (
+                      <div key={i} className="so-live-qa-item">
+                        <p className="so-live-qa-question"><strong>Q:</strong> {item.question}</p>
+                        <p className="so-live-qa-answer"><strong>A:</strong> {formatAnswerText(item.answer)}</p>
+                      </div>
+                    ))}
+                    {isLoadingAnswer && (
+                      <p className="so-live-card-hint">Getting answer…</p>
                     )}
-                  </p>
+                  </>
                 ) : (
-                  <p className="so-live-card-hint">Tap the microphone icon to start recording.</p>
+                  <p className="so-live-card-hint">Ask a question about this lesson below.</p>
                 )}
               </div>
             )}
           </section>
-
-          <section className="so-live-card">
-            <div className="so-live-card-header">
-              <span className="so-live-card-icon" aria-hidden>
-                <Icon name="fileText" size={20} />
-              </span>
-              <h2 className="so-live-card-title">STUDY NOTES</h2>
+          <div className="so-live-ask-wrap">
+            <p className="so-live-footer-meta">Lesson · {sourceCount} source{sourceCount !== 1 ? 's' : ''}</p>
+            <div className="so-live-ask-bar">
+              <input
+                type="text"
+                className="so-live-ask-input"
+                placeholder="Ask this lesson…"
+                value={askInput}
+                onChange={(e) => setAskInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendAsk()}
+                aria-label="Ask this lesson"
+              />
+              <button type="button" className="so-live-ask-send" onClick={handleSendAsk} aria-label="Send" disabled={!askInput.trim()}>
+                <Icon name="send" size={20} />
+              </button>
             </div>
-            <div className="so-live-card-body">
-              {notesText ? (
-                <p className="so-live-card-text">{notesText}</p>
-              ) : (
-                <p className="so-live-card-hint">Start recording to generate notes automatically.</p>
-              )}
-            </div>
-          </section>
+          </div>
+        </aside>
 
-          {(qaHistory.length > 0 || isLoadingAnswer) && (
-            <section className="so-live-card">
+        <div
+          className="so-live-content-center"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            padding: '24px 24px 140px',
+            boxSizing: 'border-box',
+          }}
+        >
+          <div
+            className="so-live-content-inner"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              overflow: 'hidden',
+              width: '100%',
+              maxWidth: 720,
+              margin: '0 auto',
+              boxSizing: 'border-box',
+            }}
+          >
+            <section
+              className="so-live-card so-live-card-transcript"
+              style={{
+                maxHeight: '38%',
+                minHeight: 80,
+                flex: '0 0 auto',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
               <div className="so-live-card-header">
                 <span className="so-live-card-icon" aria-hidden>
-                  <Icon name="chat" size={20} />
+                  <Icon name="mic" size={20} />
                 </span>
-                <h2 className="so-live-card-title">Q&A</h2>
-                {qaHistory.length > 0 && (
-                  <span className="so-live-qa-badge" aria-hidden>{qaHistory.length}</span>
-                )}
+                <h2 className="so-live-card-title">LIVE TRANSCRIPT</h2>
                 <button
                   type="button"
                   className="so-live-card-expand"
-                  onClick={() => setQaExpanded((e) => !e)}
-                  aria-label={qaExpanded ? 'Collapse' : 'Expand'}
+                  onClick={() => setTranscriptExpanded((e) => !e)}
+                  aria-label={transcriptExpanded ? 'Collapse' : 'Expand'}
                 >
-                  <Icon name="chevronUp" size={20} className={qaExpanded ? '' : 'so-live-chevron-down'} />
+                  <Icon name="chevronUp" size={20} className={transcriptExpanded ? '' : 'so-live-chevron-down'} />
                 </button>
               </div>
-              {qaExpanded && (
-                <div className="so-live-card-body">
-                  {qaHistory.map((item, i) => (
-                    <div key={i} className="so-live-qa-item">
-                      <p className="so-live-qa-question"><strong>Q:</strong> {item.question}</p>
-                      <p className="so-live-qa-answer"><strong>A:</strong> {item.answer}</p>
-                    </div>
-                  ))}
-                  {isLoadingAnswer && (
-                    <p className="so-live-card-hint">Getting answer…</p>
+              {transcriptExpanded && (
+                <div
+                  className="so-live-card-body"
+                  style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
+                >
+                  {displayTranscript ? (
+                    <p className="so-live-card-text">
+                      {transcriptText}
+                      {partialText && (
+                        <span className="so-live-card-partial" style={{ color: 'var(--so-text-tertiary)', fontStyle: 'italic' }}>
+                          {' '}
+                          {partialText}
+                        </span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="so-live-card-hint">Tap the microphone icon to start recording.</p>
                   )}
                 </div>
               )}
             </section>
-          )}
-        </div>
-      </div>
 
-      <div className="so-live-footer">
-        <p className="so-live-footer-meta">Lesson · {sourceCount} source{sourceCount !== 1 ? 's' : ''}</p>
-        <div className="so-live-ask-bar">
-          <input
-            type="text"
-            className="so-live-ask-input"
-            placeholder="Ask this lesson…"
-            value={askInput}
-            onChange={(e) => setAskInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSendAsk()}
-            aria-label="Ask this lesson"
-          />
-          <button type="button" className="so-live-ask-send" onClick={handleSendAsk} aria-label="Send" disabled={!askInput.trim()}>
-            <Icon name="send" size={20} />
-          </button>
+            <section
+              className="so-live-card so-live-card-notes"
+              style={{
+                flex: '1 1 0',
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
+              <div className="so-live-card-header">
+                <span className="so-live-card-icon" aria-hidden>
+                  <Icon name="fileText" size={20} />
+                </span>
+                <h2 className="so-live-card-title">STUDY NOTES</h2>
+              </div>
+              <div
+                className="so-live-card-body"
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                }}
+              >
+                <textarea
+                  className="so-live-card-notes-input"
+                  value={notesText}
+                  onChange={handleNotesChange}
+                  placeholder="Start recording to generate notes automatically, or type here. Edits save automatically."
+                  aria-label="Study notes"
+                  style={{
+                    flex: 1,
+                    minHeight: 180,
+                    overflowY: 'auto',
+                    width: '100%',
+                    padding: 0,
+                    fontFamily: 'inherit',
+                    fontSize: 15,
+                    lineHeight: 1.55,
+                    color: '#E5E5E5',
+                    background: 'transparent',
+                    border: 'none',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </div>

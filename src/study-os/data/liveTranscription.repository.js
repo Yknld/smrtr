@@ -222,6 +222,51 @@ export async function notesSetRaw(lessonId, text) {
 }
 
 /**
+ * Update notes for a lesson (user edit). Writes to both notes_raw_text and
+ * notes_final_text so the displayed value stays in sync with Supabase.
+ */
+export async function notesUpdate(lessonId, text) {
+  if (!isValidUuid(lessonId)) throw new Error(DEMO_ID_MSG)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+
+  const value = text ?? ''
+  const { data: existing } = await supabase
+    .from('lesson_outputs')
+    .select('id')
+    .eq('lesson_id', lessonId)
+    .eq('user_id', user.id)
+    .eq('type', 'notes')
+    .maybeSingle()
+
+  if (existing) {
+    const { error } = await supabase
+      .from('lesson_outputs')
+      .update({
+        notes_raw_text: value,
+        notes_final_text: value,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existing.id)
+    if (error) throw new Error(error.message || 'Failed to save notes')
+    return
+  }
+
+  const { error } = await supabase.from('lesson_outputs').insert({
+    user_id: user.id,
+    lesson_id: lessonId,
+    type: 'notes',
+    status: 'ready',
+    notes_raw_text: value,
+    notes_final_text: value,
+    content_json: {},
+  })
+  if (error) throw new Error(error.message || 'Failed to save notes')
+}
+
+/**
  * Persist final transcript to transcription_sessions/transcripts (Supabase tables).
  */
 export async function persistTranscript(transcriptionSessionId, fullText) {

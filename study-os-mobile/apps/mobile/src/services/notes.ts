@@ -192,6 +192,56 @@ class NotesService {
       return false;
     }
   }
+
+  /**
+   * Update notes (user edit). Writes to both notes_raw_text and notes_final_text
+   * so the displayed value stays in sync with Supabase.
+   */
+  async updateNotes(lessonId: string, text: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const value = text ?? '';
+    const { data: existing } = await supabase
+      .from('lesson_outputs')
+      .select('id')
+      .eq('lesson_id', lessonId)
+      .eq('user_id', user.id)
+      .eq('type', 'notes')
+      .maybeSingle();
+
+    if (existing) {
+      const { error } = await supabase
+        .from('lesson_outputs')
+        .update({
+          notes_raw_text: value,
+          notes_final_text: value,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+
+      if (error) {
+        throw new Error(`Failed to save notes: ${error.message}`);
+      }
+      return;
+    }
+
+    const { error } = await supabase.from('lesson_outputs').insert({
+      user_id: user.id,
+      lesson_id: lessonId,
+      type: 'notes',
+      status: 'ready',
+      notes_raw_text: value,
+      notes_final_text: value,
+      content_json: {},
+    });
+
+    if (error) {
+      throw new Error(`Failed to save notes: ${error.message}`);
+    }
+  }
 }
 
 // Export singleton instance

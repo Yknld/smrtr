@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -19,6 +19,38 @@ import { colors, spacing, borderRadius, typography } from '../../ui/tokens';
 import { supabase } from '../../config/supabase';
 import { AssemblyLiveService, TranscriptEvent } from '../../services/assemblyLive';
 import { notesService } from '../../services/notes';
+
+/** Split **bold** into parts for formatted Q&A answers */
+function renderMarkdownParts(text: string): Array<{ text: string; bold: boolean }> {
+  const parts: Array<{ text: string; bold: boolean }> = [];
+  const re = /\*\*(.*?)\*\*/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: text.substring(lastIndex, match.index), bold: false });
+    }
+    parts.push({ text: match[1], bold: true });
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ text: text.substring(lastIndex), bold: false });
+  }
+  return parts.length ? parts : [{ text, bold: false }];
+}
+
+const FormattedAnswer: React.FC<{ content: string; style?: any }> = ({ content, style }) => {
+  const parts = renderMarkdownParts(content);
+  return (
+    <Text style={style}>
+      {parts.map((part, i) => (
+        <Text key={i} style={[style, part.bold && { fontWeight: '700' }]}>
+          {part.text}
+        </Text>
+      ))}
+    </Text>
+  );
+};
 
 /**
  * Animated waveform icon that pulses while recording
@@ -112,10 +144,19 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
   const [currentQuestion, setCurrentQuestion] = useState<string>('');
   const [lessonQaConversationId, setLessonQaConversationId] = useState<string | null>(null);
 
-  // Refs for intervals
+  // Refs for intervals and debounce (refs hold latest so we can flush on unmount)
   const notesGenerationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const saveNotesDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const notesRef = useRef(notes);
+  const notesIsFinalRef = useRef(notesIsFinal);
 
-  // Cleanup on unmount
+  // Keep refs in sync for flush-on-unmount
+  useEffect(() => {
+    notesRef.current = notes;
+    notesIsFinalRef.current = notesIsFinal;
+  }, [notes, notesIsFinal]);
+
+  // Cleanup on unmount: flush pending debounced save and save current notes so edits are not lost
   useEffect(() => {
     return () => {
       if (assemblyServiceRef.current) {
@@ -124,10 +165,18 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
       if (notesGenerationIntervalRef.current) {
         clearInterval(notesGenerationIntervalRef.current);
       }
+      if (saveNotesDebounceRef.current) {
+        clearTimeout(saveNotesDebounceRef.current);
+        saveNotesDebounceRef.current = null;
+      }
+      const latestNotes = notesRef.current;
+      if (typeof latestNotes === 'string') {
+        saveNotesToDatabase(latestNotes, notesIsFinalRef.current, true).catch(err =>
+          console.error('[Notes] Flush save on unmount failed:', err)
+        );
+      }
     };
   }, []);
-
-  const sourceCount = transcript ? 1 : 0;
 
   /**
    * Load notes for the lesson (only when not actively recording)
@@ -243,11 +292,27 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
   };
 
   /**
-   * Save notes to database (called periodically and on finalize)
+   * Debounced save for user edits (live transcript notes area)
    */
-  const saveNotesToDatabase = async (notesText: string, isFinal: boolean = false) => {
+  const debouncedSaveNotes = useCallback((notesText: string) => {
+    if (saveNotesDebounceRef.current) {
+      clearTimeout(saveNotesDebounceRef.current);
+    }
+    saveNotesDebounceRef.current = setTimeout(() => {
+      saveNotesDebounceRef.current = null;
+      saveNotesToDatabase(notesText, notesIsFinal, true).catch(err =>
+        console.error('[Notes] Debounced save failed:', err)
+      );
+    }, 600);
+  }, [notesIsFinal]);
+
+  /**
+   * Save notes to database (called periodically, on finalize, and on user edit).
+   * When isUserEdit is true, writes the same text to both raw and final so it always displays.
+   */
+  const saveNotesToDatabase = async (notesText: string, isFinal: boolean = false, isUserEdit: boolean = false) => {
     try {
-      console.log(`[Notes] 💾 Saving to database (${notesText.length} chars, final: ${isFinal})`);
+      console.log(`[Notes] 💾 Saving to database (${notesText.length} chars, final: ${isFinal}, userEdit: ${isUserEdit})`);
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -255,23 +320,24 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
         return;
       }
 
-      // Check if record exists
+      const rawValue = isUserEdit ? notesText : (isFinal ? '' : notesText);
+      const finalValue = isUserEdit ? notesText : (isFinal ? notesText : null);
+
       const { data: existing } = await supabase
         .from('lesson_outputs')
         .select('id')
         .eq('user_id', user.id)
         .eq('lesson_id', lessonId)
         .eq('type', 'notes')
-        .single();
+        .maybeSingle();
 
       if (existing) {
-        // Update existing record
         const { error } = await supabase
           .from('lesson_outputs')
           .update({
             status: 'ready',
-            notes_raw_text: isFinal ? '' : notesText,
-            notes_final_text: isFinal ? notesText : null,
+            notes_raw_text: rawValue,
+            notes_final_text: finalValue,
             updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id);
@@ -282,7 +348,6 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
           console.log('[Notes] ✅ Updated existing record in database');
         }
       } else {
-        // Insert new record
         const { error } = await supabase
           .from('lesson_outputs')
           .insert({
@@ -290,8 +355,8 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
             lesson_id: lessonId,
             type: 'notes',
             status: 'ready',
-            notes_raw_text: isFinal ? '' : notesText,
-            notes_final_text: isFinal ? notesText : null,
+            notes_raw_text: rawValue,
+            notes_final_text: finalValue,
             content_json: {},
           });
 
@@ -581,11 +646,6 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
 
   const handleAsk = async () => {
     if (!askInput.trim()) return;
-    
-    if (!transcript || transcript.length < 10) {
-      Alert.alert('No Content', 'Please record some content first before asking questions.');
-      return;
-    }
 
     const question = askInput.trim();
     setCurrentQuestion(question);
@@ -605,7 +665,8 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
           conversationId: lessonQaConversationId,
           lessonId,
           message: question,
-          liveTranscript: transcript.trim() || undefined,
+          liveTranscript: (transcript && transcript.trim()) ? transcript.trim() : undefined,
+          notes: (notes && notes.trim()) ? notes.trim() : undefined,
         },
       });
 
@@ -622,7 +683,9 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
       setQaHistory(prev => [...prev, { question, answer }]);
     } catch (error: any) {
       console.error('Q&A error:', error);
-      Alert.alert('Error', error?.message ?? 'Failed to get answer. Please try again.');
+      const msg = error?.message ?? 'Failed to get answer. Please try again.';
+      const isOldNoContentWarning = /record some content first|no content/i.test(msg);
+      Alert.alert('Error', isOldNoContentWarning ? 'Failed to get answer. Please try again.' : msg);
     } finally {
       setIsLoadingAnswer(false);
       setCurrentQuestion('');
@@ -692,14 +755,15 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
           </View>
         </View>
 
-        {/* Content */}
+        {/* Content: Q&A, transcript, notes (scrollable) - leave space at bottom for ask bar */}
         <ScrollView
           ref={scrollViewRef}
           style={styles.content}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[styles.contentContainer, { paddingBottom: 120 }]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* Q&A Window (appears when questions are asked) */}
+          {/* Q&A block (when there are questions) */}
           {(qaHistory.length > 0 || isLoadingAnswer) && (
             <View style={styles.qaBlock}>
               <TouchableOpacity
@@ -725,19 +789,16 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
               
               {qaExpanded && (
                 <View style={styles.blockContentContainer}>
-                  {/* Show loading state for current question */}
                   {isLoadingAnswer && currentQuestion && (
                     <View style={styles.qaItem}>
                       <Text style={styles.qaQuestion}>Q: {currentQuestion}</Text>
                       <Text style={styles.qaAnswerLoading}>Thinking...</Text>
                     </View>
                   )}
-                  
-                  {/* Show Q&A history */}
                   {qaHistory.map((qa, index) => (
                     <View key={index} style={styles.qaItem}>
                       <Text style={styles.qaQuestion}>Q: {qa.question}</Text>
-                      <Text style={styles.qaAnswer}>A: {qa.answer}</Text>
+                      <FormattedAnswer content={`A: ${qa.answer}`} style={styles.qaAnswer} />
                     </View>
                   ))}
                 </View>
@@ -824,9 +885,23 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
                     Creating structured study notes
                   </Text>
                 </View>
-              ) : notes ? (
+              ) : (
                 <>
-                  <Text style={styles.blockContent}>{notes}</Text>
+                  <TextInput
+                    style={[styles.blockContent, styles.notesTextInput]}
+                    value={notes}
+                    onChangeText={(t) => {
+                      setNotes(t);
+                      debouncedSaveNotes(t);
+                    }}
+                    placeholder={isRecording
+                      ? 'Notes will appear here as you record (updated every 20s). You can also edit; changes save automatically.'
+                      : 'Start recording to generate notes automatically, or type here. Edits save automatically.'}
+                    placeholderTextColor={colors.textTertiary}
+                    multiline
+                    editable
+                    textAlignVertical="top"
+                  />
                   {isGeneratingNotes && (
                     <View style={styles.generatingIndicator}>
                       <Ionicons name="refresh" size={14} color={colors.textTertiary} />
@@ -834,60 +909,10 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
                     </View>
                   )}
                 </>
-              ) : (
-                <Text style={styles.blockPlaceholder}>
-                  {isRecording 
-                    ? 'Notes will appear here as you record (updated every 20s)'
-                    : 'Start recording to generate notes automatically'}
-                </Text>
               )}
             </View>
           </View>
         </ScrollView>
-
-        {/* Ask UI - Bottom Bar */}
-        <View style={styles.askContainer}>
-          <View style={styles.contextChip}>
-            <Text style={styles.contextChipText}>
-              Lesson • {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}
-            </Text>
-          </View>
-
-          <View style={styles.inputContainer}>
-            <TouchableOpacity
-              style={styles.micButton}
-              onPress={() => console.log('Voice input')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="mic-outline" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-
-            <TextInput
-              style={styles.input}
-              value={askInput}
-              onChangeText={setAskInput}
-              placeholder="Ask this lesson…"
-              placeholderTextColor={colors.textTertiary}
-              multiline
-              maxLength={500}
-              returnKeyType="send"
-              onSubmitEditing={handleAsk}
-            />
-
-            <TouchableOpacity
-              style={[styles.sendButton, !askInput.trim() && styles.sendButtonDisabled]}
-              onPress={handleAsk}
-              disabled={!askInput.trim()}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="arrow-up"
-                size={20}
-                color={askInput.trim() ? colors.textPrimary : colors.textTertiary}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {/* Language Picker Sheet */}
         {translateSheetVisible && (
@@ -924,6 +949,39 @@ export const LessonWorkspaceScreen: React.FC<LessonWorkspaceScreenProps> = ({
           </TouchableOpacity>
         )}
       </KeyboardAvoidingView>
+
+      {/* Ask this lesson - fixed at bottom of screen, above tab bar */}
+      <View style={[styles.askFooter, styles.askFooterFixed]} pointerEvents="box-none">
+        <Text style={styles.askBubbleContext}>
+          Lesson{transcript || notes ? ` • ${[transcript, notes].filter(Boolean).length} source(s)` : ''}
+        </Text>
+        <View style={[styles.askBubble, styles.askFooterBubble]}>
+          <TextInput
+            style={styles.askBubbleInput}
+            value={askInput}
+            onChangeText={setAskInput}
+            placeholder="Ask this lesson…"
+            placeholderTextColor={colors.textTertiary}
+            maxLength={500}
+            returnKeyType="send"
+            onSubmitEditing={handleAsk}
+            textContentType="none"
+            autoComplete="off"
+          />
+          <TouchableOpacity
+            style={[styles.askBubbleSend, !askInput.trim() && styles.askBubbleSendDisabled]}
+            onPress={handleAsk}
+            disabled={!askInput.trim()}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="arrow-up"
+              size={18}
+              color={askInput.trim() ? colors.textPrimary : colors.textTertiary}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
     </SafeAreaView>
   );
 };
@@ -932,6 +990,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+    position: 'relative',
   },
   container: {
     flex: 1,
@@ -985,7 +1044,25 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.xl + 80,
+  },
+  askFooter: {
+    flexDirection: 'column',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  askFooterFixed: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  askFooterBubble: {
+    alignSelf: 'stretch',
   },
   // Q&A Block
   qaBlock: {
@@ -1035,6 +1112,10 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: 24,
   },
+  notesTextInput: {
+    minHeight: 80,
+    padding: 0,
+  },
   blockPlaceholder: {
     ...typography.body,
     color: colors.textTertiary,
@@ -1077,59 +1158,48 @@ const styles = StyleSheet.create({
   notesContentContainer: {
     // No extra margin since it's not collapsible
   },
-  askContainer: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-    backgroundColor: colors.background,
-  },
-  contextChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: borderRadius.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-    marginBottom: spacing.sm,
-  },
-  contextChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textTertiary,
-    letterSpacing: 0.3,
-  },
-  inputContainer: {
+  askBubbleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
+    gap: spacing.sm,
+    maxWidth: '100%',
+  },
+  askBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surfaceElevated,
-    borderRadius: borderRadius.md,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: spacing.sm,
-  },
-  micButton: {
-    padding: spacing.xs,
-  },
-  input: {
-    flex: 1,
-    ...typography.body,
-    color: colors.textPrimary,
-    maxHeight: 100,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
     paddingVertical: spacing.xs,
+    flex: 1,
+    maxWidth: '100%',
   },
-  sendButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceElevated,
+  askBubbleInput: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.textPrimary,
+    paddingVertical: 6,
+    paddingRight: spacing.sm,
+    flex: 1,
+    minWidth: 0,
+  },
+  askBubbleSend: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendButtonDisabled: {
+  askBubbleSendDisabled: {
     opacity: 0.5,
+  },
+  askBubbleContext: {
+    fontSize: 11,
+    color: colors.textTertiary,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

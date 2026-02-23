@@ -37,19 +37,34 @@ Edge Function: lesson_generate_video
     ↓
 2. Gemini generates STORY_JSON plan
     ↓
-3. Build Remotion prompt with STORY_JSON
+3. Build Remotion prompt (embeds upload_token + lesson_video_upload URL)
     ↓
 4. Start OpenHand conversation
     ↓
-5. Return immediately (status: "generating")
+5. Insert lesson_assets row (storage_path=null, metadata.upload_token set)
     ↓
-6. Background: Poll OpenHand for completion
+6. Return immediately (status: "generating")
+
+    ──── Primary path (OpenHand curl) ────
+    OpenHand renders video with Remotion
+        ↓
+    OpenHand runs curl to lesson_video_upload with X-Upload-Token
+        ↓
+    lesson_video_upload uploads MP4 to Supabase Storage
+        ↓
+    lesson_video_upload sets storage_path in lesson_assets
+    ──────────────────────────────────────
+
+    ──── Fallback path (poller) ────
+    video_poll_github cron polls OpenHand conversation
+        ↓
+    Downloads video from OpenHand artifacts
+        ↓
+    Uploads to Supabase Storage + sets storage_path
+    ────────────────────────────────
+
     ↓
-7. Download video from OpenHand artifacts
-    ↓
-8. Upload to Supabase Storage
-    ↓
-9. Update lesson_assets record
+Frontend polls lesson_assets.storage_path → shows video when non-null
 ```
 
 ## Setup
@@ -145,7 +160,7 @@ When `storage_path` is populated and `mime_type = 'video/mp4'`, the video is rea
 
 ## Video Specifications
 
-- **Duration**: Exactly 30 seconds
+- **Duration**: ~60 seconds (55–65 s)
 - **FPS**: 30
 - **Resolutions**:
   - 16:9: 1280x720

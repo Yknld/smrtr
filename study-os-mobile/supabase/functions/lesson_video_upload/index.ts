@@ -61,12 +61,13 @@ serve(async (req: Request) => {
 
   const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-  // Find the lesson_assets row for this token (video with this upload_token)
+  // Find the lesson_assets row for this token (filter by upload_token in the DB query)
   const { data: rows, error: findError } = await supabaseAdmin
     .from("lesson_assets")
     .select("id, lesson_id, user_id, storage_path, metadata")
     .eq("kind", "video")
-    .limit(100);
+    .filter("metadata->>upload_token", "eq", token)
+    .limit(1);
 
   if (findError) {
     return new Response(
@@ -75,9 +76,7 @@ serve(async (req: Request) => {
     );
   }
 
-  const row = (rows ?? []).find(
-    (r: { metadata?: { upload_token?: string } }) => (r.metadata as { upload_token?: string })?.upload_token === token
-  );
+  const row = (rows ?? [])[0];
 
   if (!row) {
     return new Response(

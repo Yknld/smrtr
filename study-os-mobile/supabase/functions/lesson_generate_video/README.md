@@ -40,10 +40,11 @@ Requires JWT Bearer token in Authorization header.
 ## How It Works
 
 1. **Story Planning**: Uses Gemini to generate a detailed STORY_JSON plan based on lesson content (summary, transcript, or title)
-2. **Video Generation**: Sends the story plan to OpenHand agent with Remotion prompt
-3. **Background Processing**: Polls OpenHand for completion and downloads the generated video
-4. **Storage**: Uploads the video to Supabase Storage (`lesson_assets` bucket)
-5. **Database**: Creates/updates `lesson_assets` record with video metadata
+2. **Video Generation**: Sends the story plan to OpenHand agent with a full Remotion prompt; a one-time `upload_token` UUID and the `lesson_video_upload` URL are embedded in the prompt
+3. **DB Record Created**: A `lesson_assets` row is inserted immediately with `storage_path = null` and `metadata.upload_token` set
+4. **Returns Immediately**: Responds with `status: "generating"` so the client is not blocked
+5. **Primary Delivery — OpenHand curl**: After rendering, the agent runs the `curl` command in its prompt to POST the MP4 directly to `lesson_video_upload`; that function uploads the bytes to Supabase Storage and sets `storage_path`
+6. **Fallback Delivery — Poller**: The `video_poll_github` cron function polls the OpenHand conversation and performs the same upload if the curl step was skipped or failed
 
 ## Environment Variables
 
@@ -55,7 +56,7 @@ Required:
 
 ## Video Specifications
 
-- **Duration**: Exactly 30 seconds
+- **Duration**: ~60 seconds (55–65 s; scaled by Gemini story planner)
 - **FPS**: 30
 - **Resolution**: 
   - 16:9: 1280x720
@@ -101,8 +102,8 @@ Videos are tracked in the `lesson_assets` table:
 ## Status Flow
 
 1. **generating**: Video generation started, OpenHand conversation in progress
-2. **ready**: Video generated and uploaded successfully
-3. **failed**: Generation or upload failed (check error details)
+2. **ready**: `storage_path` is set — video generated and uploaded successfully (either by OpenHand curl or poller)
+3. **failed**: Generation or upload failed (check `mime_type` for error text)
 
 ## Notes
 

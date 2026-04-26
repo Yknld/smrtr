@@ -10,7 +10,7 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
-  # Note: Building only GPU image due to GitHub Actions disk space limits
+  # Note: Building only GPU image due to GitHub Actions disk spae limits
   # This image works for both Pods AND Serverless deployments
   build-gpu:
     name: Build GPU Image (Works for Pods & Serverless)

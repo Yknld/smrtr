@@ -30,7 +30,7 @@ export class GeminiLiveService {
     }
 
     const response = await fetch(
-      'https://euxfugfzmpsemkjpcpuz.supabase.co/functions/v1/gemini_live_token',
+      'https://redixnommutdtpmccpto.supabase.co/functions/v1/gemini_live_token',
       {
         method: 'POST',
         headers: {

@@ -10,8 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Configuration
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://euxfugfzmpsemkjpcpuz.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1eGZ1Z2Z6bXBzZW1ranBjcHV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgwMDkyMDYsImV4cCI6MjA4MzU4NTIwNn0.bsfC3T5WoUhGrS-6VuowULRHciY7BpzMCBQ3F4fZFRI';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://redixnommutdtpmccpto.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlZGl4bm9tbXV0ZHRwbWNjcHRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMzM4NzMsImV4cCI6MjA5MjcwOTg3M30.uLRxJKJduzcxYAvpwT5C8HJhYlPZ7KdYnTHbHi68zqY';
 const TEST_EMAIL = process.env.TEST_EMAIL || 'user1@test.com';
 const TEST_PASSWORD = process.env.TEST_PASSWORD || 'password123';
 
@@ -41,7 +41,7 @@ async function applyMigration() {
   // Split by statement and execute (simple approach)
   // Note: This won't work with the Supabase client directly - needs to be applied via dashboard
   console.log('📄 Migration file found. Please apply manually via Supabase SQL Editor:');
-  console.log('   1. Go to: https://supabase.com/dashboard/project/euxfugfzmpsemkjpcpuz/sql');
+  console.log('   1. Go to: https://supabase.com/dashboard/project/redixnommutdtpmccpto/sql');
   console.log('   2. Paste the contents of: supabase/migrations/014_enhance_lesson_outputs.sql');
   console.log('   3. Run the SQL');
   console.log('   4. Re-run this test script\n');

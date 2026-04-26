@@ -105,7 +105,7 @@ async function uploadAudio() {
     
     console.log('\n🧪 Test transcription with:');
     console.log('─────────────────────────────────────────────────────────────');
-    console.log(`curl -X POST https://euxfugfzmpsemkjpcpuz.supabase.co/functions/v1/transcribe_chunk \\`);
+    console.log(`curl -X POST https://redixnommutdtpmccpto.supabase.co/functions/v1/transcribe_chunk \\`);
     console.log(`  -H "Authorization: Bearer ${token}" \\`);
     console.log(`  -H "Content-Type: application/json" \\`);
     console.log(`  -d '{`);

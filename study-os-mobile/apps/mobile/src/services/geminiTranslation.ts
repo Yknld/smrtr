@@ -94,7 +94,7 @@ export class GeminiTranslationService {
       }
 
       const response = await fetch(
-        'https://euxfugfzmpsemkjpcpuz.supabase.co/functions/v1/gemini_translate',
+        'https://redixnommutdtpmccpto.supabase.co/functions/v1/gemini_translate',
         {
           method: 'POST',
           headers: {

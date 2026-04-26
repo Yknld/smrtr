@@ -66,6 +66,11 @@ dist-ssr
 .env
 .env.local
 .secrets/
+# These paths were tracked historically; keep secrets out of the repo
+study-os-mobile/apps/mobile/.env
+study-os-mobile/backend/tests/.env
+study-os-mobile/supabase/.temp/linked-project.json
+study-os-mobile/supabase/.temp/storage-migration
 
 # Archived / local-only (clean repo; keep gar/ and AppIcons out of GitHub)
 gar/

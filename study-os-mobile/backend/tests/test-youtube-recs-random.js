@@ -8,7 +8,7 @@ const https = require('https');
 const http = require('http');
 
 // Configuration
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://euxfugfzmpsemkjpcpuz.supabase.co';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://redixnommutdtpmccpto.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1eGZ1Z2Z6bXBzZW1ranBjcHV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQyODQ2NTQsImV4cCI6MjA0OTg2MDY1NH0.JxP0iqcj1DPHrp3fO5xoFXv-eUY8aOcFKAhqIR4gIac';
 
 // Random topics to test

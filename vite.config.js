@@ -32,10 +32,10 @@ function copySolverToDist() {
 
 const SOLVER_VIEWER_BASE =
   process.env.VITE_SOLVER_VIEWER_BASE ||
-  'https://euxfugfzmpsemkjpcpuz.supabase.co/storage/v1/object/public/solver'
+  'https://redixnommutdtpmccpto.supabase.co/storage/v1/object/public/solver'
 
 const SUPABASE_URL =
-  process.env.VITE_SUPABASE_URL || 'https://euxfugfzmpsemkjpcpuz.supabase.co'
+  process.env.VITE_SUPABASE_URL || 'https://redixnommutdtpmccpto.supabase.co'
 
 export default defineConfig({
   server: {

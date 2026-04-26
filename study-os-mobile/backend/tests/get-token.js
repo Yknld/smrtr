@@ -11,8 +11,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://euxfugfzmpsemkjpcpuz.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1eGZ1Z2Z6bXBzZW1ranBjcHV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgwMDkyMDYsImV4cCI6MjA4MzU4NTIwNn0.bsfC3T5WoUhGrS-6VuowULRHciY7BpzMCBQ3F4fZFRI';
+const SUPABASE_URL = 'https://redixnommutdtpmccpto.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlZGl4bm9tbXV0ZHRwbWNjcHRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMzM4NzMsImV4cCI6MjA5MjcwOTg3M30.uLRxJKJduzcxYAvpwT5C8HJhYlPZ7KdYnTHbHi68zqY';
 
 async function getToken(email, password) {
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -37,7 +37,7 @@ async function getToken(email, password) {
   console.log('\n💾 Copy this for curl:');
   console.log(`export USER_TOKEN="${data.session.access_token}"`);
   console.log('\n🧪 Test command:');
-  console.log(`curl -X POST https://euxfugfzmpsemkjpcpuz.supabase.co/functions/v1/transcribe_start \\
+  console.log(`curl -X POST https://redixnommutdtpmccpto.supabase.co/functions/v1/transcribe_start \\
   -H "Authorization: Bearer ${data.session.access_token}" \\
   -H "Content-Type: application/json" \\
   -d '{"language":"en-US"}'`);

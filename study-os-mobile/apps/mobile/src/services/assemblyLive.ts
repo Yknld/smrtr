@@ -65,7 +65,7 @@ export class AssemblyLiveService {
       // Step 2: Call backend to create transcription session
       console.log('📞 Calling backend /transcribe_start...');
       const response = await fetch(
-        'https://euxfugfzmpsemkjpcpuz.supabase.co/functions/v1/transcribe_start',
+        'https://redixnommutdtpmccpto.supabase.co/functions/v1/transcribe_start',
         {
           method: 'POST',
           headers: {

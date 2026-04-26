@@ -94,7 +94,18 @@ CREATE INDEX idx_lesson_youtube_resources_topic ON lesson_youtube_resources(less
 -- TRIGGERS FOR UPDATED_AT
 -- =============================================================================
 
--- Apply the existing update_updated_at_column function
+-- Ensure the updated_at trigger function exists
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+-- Apply the update_updated_at_column function
 CREATE TRIGGER update_youtube_videos_updated_at
   BEFORE UPDATE ON youtube_videos
   FOR EACH ROW

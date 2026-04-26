@@ -327,7 +327,7 @@ export async function createPodcastEpisode(
   }
 
   const response = await fetch(
-    'https://euxfugfzmpsemkjpcpuz.supabase.co/functions/v1/podcast_create',
+    'https://redixnommutdtpmccpto.supabase.co/functions/v1/podcast_create',
     {
       method: 'POST',
       headers: {
